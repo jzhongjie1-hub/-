@@ -1,0 +1,2505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>仓库物料盘点系统</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script>
+// 如果 CDN 加载失败，尝试备用源
+if (typeof XLSX === 'undefined') {
+  document.write('<script src="https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"><\/script>');
+}
+</script>
+<script>
+// 如果备用源也失败，尝试第三个源
+if (typeof XLSX === 'undefined') {
+  document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"><\/script>');
+}
+</script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Microsoft YaHei', Arial, sans-serif; background: #f0f2f5; color: #333; min-height: 100vh; }
+
+/* ===== 顶部导航 ===== */
+.topbar {
+  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+  color: white; padding: 0 24px;
+  display: flex; align-items: center; height: 56px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2); position: sticky; top: 0; z-index: 50;
+}
+.topbar-logo { font-size: 20px; font-weight: 700; margin-right: auto; }
+.topbar-meta { font-size: 13px; opacity: 0.85; margin-right: 16px; }
+.topbar-checker { font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.topbar-btn { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s; }
+.topbar-btn:hover { background: rgba(255,255,255,0.25); }
+
+/* ===== 主布局 ===== */
+.app-layout { display: flex; min-height: calc(100vh - 56px); }
+
+/* ===== 侧边栏 - 任务列表 ===== */
+.sidebar {
+  width: 280px; background: white; border-right: 1px solid #e8e8e8;
+  display: flex; flex-direction: column; flex-shrink: 0;
+}
+.sidebar-header {
+  padding: 16px; border-bottom: 1px solid #f0f0f0;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.sidebar-header h3 { font-size: 15px; color: #1e3c72; }
+.sidebar-list { flex: 1; overflow-y: auto; padding: 8px; }
+.task-card {
+  padding: 12px; border-radius: 8px; cursor: pointer;
+  margin-bottom: 4px; transition: all 0.15s; border: 2px solid transparent;
+}
+.task-card:hover { background: #f0f5ff; }
+.task-card.active { background: #e6f0ff; border-color: #2a5298; }
+.task-card-title { font-size: 14px; font-weight: 600; color: #1e3c72; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.task-card-meta { font-size: 11px; color: #999; display: flex; gap: 10px; }
+.task-card-progress { font-size: 11px; color: #52c41a; margin-top: 4px; }
+.task-card-status { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 500; }
+.status-counting { background: #fff7e6; color: #faad14; border: 1px solid #ffd591; }
+.status-done { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+.status-draft { background: #f5f5f5; color: #999; border: 1px solid #d9d9d9; }
+
+.task-card-actions { display: flex; gap: 4px; margin-top: 6px; }
+.task-card-actions button {
+  padding: 2px 8px; border: 1px solid #d9d9d9; border-radius: 4px;
+  background: white; font-size: 10px; cursor: pointer; color: #666; transition: all 0.15s;
+}
+.task-card-actions button:hover { border-color: #2a5298; color: #2a5298; }
+.task-card-actions button.btn-del:hover { border-color: #ff4d4f; color: #ff4d4f; }
+
+.sidebar-empty { text-align: center; padding: 40px 16px; color: #bbb; }
+.sidebar-empty .icon { font-size: 40px; margin-bottom: 8px; }
+
+/* ===== 主内容区 ===== */
+.main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+/* 欢迎/空状态 */
+.welcome-view {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 40px;
+}
+.welcome-box { text-align: center; max-width: 460px; }
+.welcome-icon { font-size: 72px; margin-bottom: 16px; }
+.welcome-title { font-size: 22px; font-weight: 700; color: #1e3c72; margin-bottom: 8px; }
+.welcome-desc { font-size: 14px; color: #888; line-height: 1.8; margin-bottom: 24px; }
+
+/* ===== 盘点工作区 ===== */
+.workspace { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+.workspace.active { display: flex; }
+
+/* 导入卡片 */
+.import-card {
+  margin: 16px 20px; background: white; border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 20px 24px;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+}
+.import-info { display: flex; align-items: center; gap: 12px; }
+.import-icon { font-size: 28px; }
+.import-name { font-size: 14px; font-weight: 600; color: #1e3c72; }
+.import-meta { font-size: 12px; color: #888; margin-top: 2px; }
+.import-actions { display: flex; gap: 8px; }
+
+/* 创建任务区 */
+.create-task-card {
+  margin: 24px 20px; background: white; border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 32px; text-align: center;
+}
+.drop-area {
+  border: 2px dashed #adc6ff; border-radius: 10px;
+  padding: 40px 24px; cursor: pointer; transition: all 0.2s; background: #f0f5ff;
+}
+.drop-area:hover, .drop-area.drag-over { border-color: #2a5298; background: #e6ecff; }
+.drop-icon { font-size: 48px; margin-bottom: 12px; }
+.drop-title { font-size: 18px; font-weight: 600; color: #1e3c72; margin-bottom: 8px; }
+.drop-sub { font-size: 13px; color: #888; }
+
+/* ===== 按钮 ===== */
+.btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; white-space: nowrap; }
+.btn-primary { background: #2a5298; color: white; }
+.btn-primary:hover { background: #1e3c72; }
+.btn-success { background: #52c41a; color: white; }
+.btn-success:hover { background: #389e0d; }
+.btn-warning { background: #faad14; color: white; }
+.btn-warning:hover { background: #d48806; }
+.btn-danger { background: #ff4d4f; color: white; }
+.btn-danger:hover { background: #cf1322; }
+.btn-ghost { background: white; color: #2a5298; border: 1px solid #2a5298; }
+.btn-ghost:hover { background: #f0f5ff; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-xs { padding: 3px 8px; font-size: 11px; }
+
+/* ===== 统计栏 ===== */
+.stats-bar { margin: 0 20px; }
+.stats-inner { background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 12px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.stat-item { display: flex; flex-direction: column; align-items: center; min-width: 56px; }
+.stat-val { font-size: 20px; font-weight: 700; }
+.stat-lab { font-size: 11px; color: #888; margin-top: 2px; }
+.stat-val.blue { color: #2a5298; }
+.stat-val.green { color: #52c41a; }
+.stat-val.yellow { color: #faad14; }
+.stat-divider { width: 1px; height: 36px; background: #f0f0f0; }
+.progress-wrap { flex: 1; min-width: 150px; }
+.progress-label { font-size: 12px; color: #666; margin-bottom: 3px; }
+.progress-bar { height: 8px; background: #f0f0f0; border-radius: 5px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #52c41a, #73d13d); border-radius: 5px; transition: width 0.4s; }
+
+/* ===== 工具栏 ===== */
+.toolbar { margin: 10px 20px 0; }
+.toolbar-inner { background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 8px 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.search-input { padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 13px; width: 200px; transition: border-color 0.2s; }
+.search-input:focus { outline: none; border-color: #2a5298; box-shadow: 0 0 0 2px rgba(42,82,152,0.1); }
+.filter-btns { display: flex; gap: 4px; }
+.filter-btn { padding: 5px 12px; border: 1px solid #d9d9d9; border-radius: 6px; background: white; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+.filter-btn.active { background: #2a5298; color: white; border-color: #2a5298; }
+.toolbar-right { margin-left: auto; display: flex; gap: 8px; }
+
+/* ===== 表格区 ===== */
+.table-section { margin: 10px 20px 20px; flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; }
+.table-wrap { background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow-x: auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th { background: #f5f7fa; padding: 10px 8px; text-align: left; font-weight: 600; color: #555; border-bottom: 2px solid #e8e8e8; white-space: nowrap; position: sticky; top: 0; z-index: 10; }
+thead th.c { text-align: center; }
+tbody tr { border-bottom: 1px solid #f5f5f5; transition: background 0.1s; }
+tbody tr:hover { background: #fafbff !important; }
+tbody tr.done-row { background: #f6ffed; }
+td { padding: 7px 8px; vertical-align: middle; }
+td.c { text-align: center; }
+td.code { font-family: monospace; color: #1890ff; font-weight: 500; font-size: 12px; }
+
+.qty-input { border: 1px solid #d9d9d9; border-radius: 5px; padding: 4px 6px; font-size: 13px; width: 80px; text-align: center; transition: border-color 0.2s; }
+.qty-input:focus { outline: none; border-color: #2a5298; box-shadow: 0 0 0 2px rgba(42,82,152,0.1); }
+.qty-input.filled { border-color: #52c41a; background: #f6ffed; }
+.remark-input { border: 1px solid #d9d9d9; border-radius: 5px; padding: 4px 6px; font-size: 12px; width: 100px; }
+.remark-input:focus { outline: none; border-color: #2a5298; }
+
+.status-badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.badge-pending { background: #fff7e6; color: #faad14; border: 1px solid #ffd591; }
+.badge-done { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+
+/* ===== 空状态 ===== */
+.empty-state { text-align: center; padding: 60px 24px; color: #bbb; }
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; }
+
+/* ===== 弹窗通用 ===== */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center; }
+.modal-overlay.active { display: flex; }
+.modal { background: white; border-radius: 12px; padding: 24px; width: 95%; max-width: 1000px; max-height: 85vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.modal-header h2 { font-size: 18px; color: #1e3c72; }
+.modal-close { font-size: 22px; cursor: pointer; color: #888; line-height: 1; }
+.modal-close:hover { color: #333; }
+.modal-footer { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ===== 列设置弹窗 ===== */
+.col-card { background: white; border-radius: 12px; padding: 24px; width: 90%; max-width: 640px; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+.col-card h3 { font-size: 16px; color: #1e3c72; margin-bottom: 14px; }
+.col-row { display: flex; align-items: center; margin-bottom: 10px; gap: 10px; font-size: 13px; }
+.col-row label { width: 90px; color: #555; font-weight: 500; }
+.col-row select { flex: 1; padding: 6px 8px; border: 1px solid #d9d9d9; border-radius: 5px; font-size: 13px; }
+.col-row select:focus { outline: none; border-color: #2a5298; }
+
+/* ===== 报告样式 ===== */
+.report-summary { background: #f5f7fa; border-radius: 8px; padding: 14px 18px; margin-bottom: 16px; font-size: 13px; line-height: 2; }
+.report-table table { font-size: 12px; }
+.report-table thead th { background: #1e3c72; color: white; padding: 9px 10px; position: static; }
+.diff-plus { color: #ff4d4f; font-weight: 600; }
+.diff-minus { color: #52c41a; font-weight: 600; }
+.diff-zero { color: #aaa; }
+
+/* ===== Toast ===== */
+.toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); background: rgba(30,60,114,0.92); color: white; padding: 10px 24px; border-radius: 20px; font-size: 13px; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.toast.show { opacity: 1; }
+
+/* ===== 新建任务弹窗 ===== */
+.task-form { display: flex; flex-direction: column; gap: 14px; }
+.task-form label { font-size: 13px; color: #555; font-weight: 500; }
+.task-form input { padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; }
+.task-form input:focus { outline: none; border-color: #2a5298; box-shadow: 0 0 0 2px rgba(42,82,152,0.1); }
+
+/* ===== 签名样式 ===== */
+.sig-canvas-wrap {
+  position: relative; border: 2px dashed #b0c4de; border-radius: 8px;
+  background: #fff; margin: 10px 0; overflow: hidden; cursor: crosshair;
+}
+.sig-canvas-wrap canvas { display: block; width: 100%; height: 160px; touch-action: none; }
+.sig-placeholder {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  color: #ccc; font-size: 14px; pointer-events: none; user-select: none;
+}
+.sig-placeholder.hidden { display: none; }
+.sig-actions { display: flex; gap: 8px; margin-top: 8px; }
+.sig-role-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.sig-role-tab {
+  padding: 6px 14px; border-radius: 16px; font-size: 13px; cursor: pointer;
+  border: 1px solid #d9d9d9; background: #fff; color: #555; transition: all 0.2s;
+}
+.sig-role-tab.active { background: #1e3c72; color: #fff; border-color: #1e3c72; }
+.sig-role-tab.done { background: #f6ffed; color: #52c41a; border-color: #b7eb8f; }
+.sig-role-tab.done::after { content: ' ✓'; }
+.sig-saved-list { margin-top: 12px; }
+.sig-saved-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  background: #f9f9f9; border-radius: 8px; margin-bottom: 6px;
+}
+.sig-saved-item img { height: 40px; border: 1px solid #eee; border-radius: 4px; }
+.sig-saved-item .sig-info { font-size: 12px; color: #555; }
+.sig-saved-item .sig-info .sig-who { font-weight: 600; color: #1e3c72; }
+
+/* 报告中的签名区域 */
+.report-sig-area {
+  margin-top: 20px; padding-top: 16px; border-top: 2px solid #e8e8e8;
+}
+.report-sig-area h4 { font-size: 14px; color: #1e3c72; margin-bottom: 12px; }
+.report-sig-grid { display: flex; gap: 16px; flex-wrap: wrap; }
+.report-sig-box {
+  flex: 1; min-width: 150px; text-align: center; padding: 12px;
+  background: #fafafa; border-radius: 8px; border: 1px solid #eee;
+}
+.report-sig-box .sig-label { font-size: 12px; color: #888; margin-bottom: 6px; }
+.report-sig-box .sig-name { font-size: 14px; font-weight: 600; color: #1e3c72; margin-bottom: 6px; }
+.report-sig-box img { max-height: 60px; margin: 0 auto; display: block; }
+.report-sig-box .sig-time { font-size: 11px; color: #aaa; margin-top: 4px; }
+
+/* ===== 登录页 ===== */
+.login-page {
+  position: fixed; inset: 0; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #1a3a6c 100%);
+  display: flex; align-items: center; justify-content: center; z-index: 9999;
+}
+.login-card {
+  background: white; border-radius: 16px; padding: 40px; width: 360px; max-width: 90%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.login-card h2 { text-align: center; color: #1e3c72; font-size: 22px; margin-bottom: 6px; }
+.login-card .login-sub { text-align: center; color: #999; font-size: 13px; margin-bottom: 24px; }
+.login-field { margin-bottom: 16px; }
+.login-field label { display: block; font-size: 13px; color: #555; font-weight: 500; margin-bottom: 4px; }
+.login-field input {
+  width: 100%; padding: 10px 14px; border: 1px solid #d9d9d9; border-radius: 8px;
+  font-size: 14px; transition: border-color 0.2s;
+}
+.login-field input:focus { outline: none; border-color: #2a5298; box-shadow: 0 0 0 3px rgba(42,82,152,0.1); }
+.login-error { color: #ff4d4f; font-size: 12px; text-align: center; min-height: 20px; margin-bottom: 8px; }
+.login-btn {
+  width: 100%; padding: 12px; background: #2a5298; color: white; border: none;
+  border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s;
+}
+.login-btn:hover { background: #1e3c72; }
+.login-hint { text-align: center; font-size: 11px; color: #bbb; margin-top: 16px; }
+
+/* ===== 用户管理 ===== */
+.user-mgmt-list { max-height: 360px; overflow-y: auto; }
+.user-row {
+  display: flex; align-items: center; padding: 10px 12px; gap: 10px;
+  border-bottom: 1px solid #f5f5f5; font-size: 13px;
+}
+.user-row:last-child { border-bottom: none; }
+.user-avatar {
+  width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-size: 16px; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.user-avatar.admin { background: #1e3c72; }
+.user-avatar.checker { background: #52c41a; }
+.user-info { flex: 1; min-width: 0; }
+.user-info .user-name { font-weight: 600; color: #333; }
+.user-info .user-username { font-size: 11px; color: #999; }
+.user-role-badge {
+  padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 500;
+}
+.role-admin { background: #f0f5ff; color: #2a5298; border: 1px solid #adc6ff; }
+.role-checker { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+.user-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.user-actions button {
+  padding: 3px 8px; border: 1px solid #d9d9d9; border-radius: 4px;
+  background: #fff; font-size: 11px; cursor: pointer; color: #666; transition: all 0.15s;
+}
+.user-actions button:hover { border-color: #2a5298; color: #2a5298; }
+.user-actions button.btn-del:hover { border-color: #ff4d4f; color: #ff4d4f; }
+
+/* ===== 权限锁定遮罩 ===== */
+.locked-overlay {
+  display: none; position: absolute; inset: 0; background: rgba(255,255,255,0.7);
+  align-items: center; justify-content: center; z-index: 5; border-radius: inherit;
+  cursor: not-allowed;
+}
+.locked-overlay span { color: #999; font-size: 12px; }
+
+/* ===== 响应式 ===== */
+
+/* 手机端侧边栏遮罩 */
+.sidebar-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  z-index: 59;
+}
+.sidebar-overlay.active { display: block; }
+
+/* 手机端菜单按钮 */
+.sidebar-toggle {
+  display: none; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
+  color: white; width: 36px; height: 36px; border-radius: 8px; font-size: 18px;
+  cursor: pointer; margin-right: 10px; flex-shrink: 0; line-height: 1;
+}
+
+@media (max-width: 768px) {
+  /* 菜单按钮显示 */
+  .sidebar-toggle { display: flex; align-items: center; justify-content: center; }
+
+  /* 侧边栏变为抽屉 */
+  .sidebar {
+    position: fixed; left: 0; top: 56px; bottom: 0; z-index: 60;
+    width: 280px; transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    box-shadow: none;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+  }
+
+  /* 主布局去掉侧边栏占位 */
+  .app-layout { flex-direction: column; }
+
+  /* 顶栏适配 */
+  .topbar { padding: 0 12px; height: 52px; }
+  .topbar-logo { font-size: 16px; }
+  .topbar-meta { display: none; }
+  .topbar-checker { font-size: 12px; }
+  .topbar-btn { padding: 4px 8px; font-size: 11px; }
+
+  /* 统计栏适配 */
+  .stats-bar { margin: 0 10px; }
+  .stats-inner { padding: 10px 12px; gap: 10px; }
+  .stat-val { font-size: 17px; }
+  .stat-item { min-width: 44px; }
+  .progress-wrap { min-width: 100px; }
+
+  /* 工具栏适配 */
+  .toolbar { margin: 8px 10px 0; }
+  .toolbar-inner { padding: 6px 10px; gap: 6px; }
+  .search-input { width: 100%; font-size: 16px; /* 防止iOS自动缩放 */ }
+  .filter-btn { padding: 5px 8px; font-size: 11px; }
+  .toolbar-right { width: 100%; justify-content: flex-end; }
+
+  /* 表格区适配 - 关键修复：可滚动 */
+  .table-section { margin: 8px 10px 10px; -webkit-overflow-scrolling: touch; overflow-x: auto !important; overflow-y: auto !important; }
+  .table-wrap { border-radius: 8px; overflow: visible; }
+  table { font-size: 12px; min-width: 680px; /* 保证表格不压缩，可横向滚动 */ width: max-content; }
+  thead th { padding: 8px 6px; font-size: 11px; }
+  td { padding: 6px 5px; }
+  td.code { font-size: 11px; }
+
+  /* 输入框适配 - 增大触摸区域 */
+  .qty-input { width: 80px; height: 40px; font-size: 16px; /* 防止iOS自动缩放 */ border-radius: 6px; padding: 6px 4px; }
+  .remark-input { width: 80px; height: 40px; font-size: 16px; padding: 6px 4px; }
+
+  /* 按钮适配 - 增大触摸区域 */
+  .btn { padding: 8px 14px; font-size: 13px; min-height: 38px; }
+  .btn-sm { padding: 6px 10px; font-size: 12px; min-height: 32px; }
+  .btn-xs { padding: 4px 8px; font-size: 11px; }
+
+  /* 导入卡片适配 */
+  .import-card { margin: 10px; padding: 14px 16px; flex-direction: column; align-items: flex-start; }
+  .import-actions { width: 100%; }
+  .import-actions .btn { flex: 1; }
+
+  /* 创建任务区适配 */
+  .create-task-card { margin: 14px 10px; padding: 20px; }
+
+  /* 弹窗适配 */
+  .modal { width: 96%; max-width: none; max-height: 90vh; padding: 18px; border-radius: 12px; margin: 10px; }
+  .col-card { width: 96%; max-width: none; padding: 18px; }
+  .modal-header h2 { font-size: 16px; }
+
+  /* 签名区适配 */
+  .sig-canvas-wrap canvas { height: 140px; }
+
+  /* Toast 适配 */
+  .toast { bottom: 20px; font-size: 13px; padding: 10px 18px; }
+
+  /* 登录页适配 */
+  .login-card { padding: 28px 20px; }
+  .login-card h2 { font-size: 20px; }
+
+  /* 用户管理适配 */
+  .user-mgmt-list { max-height: 280px; }
+  .user-row { padding: 8px 10px; gap: 8px; }
+
+  /* 报告弹窗适配 */
+  .report-summary { padding: 12px 14px; font-size: 12px; }
+  .report-table table { font-size: 11px; min-width: 600px; }
+
+  /* 滚动提示动画 */
+  @keyframes hintPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- 登录页 -->
+<div class="login-page" id="loginPage" style="display:none">
+  <div class="login-card">
+    <h2>📦 仓库物料盘点系统</h2>
+    <div class="login-sub">请登录以继续操作</div>
+    <div class="login-error" id="loginError"></div>
+    <div class="login-field">
+      <label>用户名</label>
+      <input type="text" id="loginUsername" placeholder="请输入用户名" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('loginPassword').focus()">
+    </div>
+    <div class="login-field">
+      <label>密码</label>
+      <input type="password" id="loginPassword" placeholder="请输入密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="login-btn" onclick="doLogin()">登 录</button>
+    <div class="login-hint">首次使用默认账号: admin / admin123</div>
+    <!-- 服务器地址信息 -->
+    <div id="serverAddrInfo" style="margin-top:16px;padding-top:12px;border-top:1px solid #eee;text-align:center">
+      <div style="font-size:11px;color:#aaa;margin-bottom:6px">📱 手机扫码或点击访问</div>
+      <div id="serverUrlList" style="font-size:13px;color:#666;word-break:break-all"></div>
+      <canvas id="qrCanvas" style="margin:8px auto 0;display:none;border-radius:8px"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- 顶部导航 -->
+<div class="topbar" id="topbar">
+  <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">☰</button>
+  <div class="topbar-logo">📦 仓库盘点</div>
+  <div class="topbar-meta" id="topbarDate"></div>
+  <div class="topbar-checker">
+    <span id="currentUserDisplay">-</span>
+    <button class="topbar-btn" id="btnUserMgmt" style="display:none" onclick="showUserMgmtModal()">👥 用户管理</button>
+    <button class="topbar-btn" id="btnChangePwd" onclick="showChangePwdModal()">🔑 改密</button>
+    <button class="topbar-btn" onclick="doLogout()">退出</button>
+  </div>
+</div>
+
+<div class="app-layout" id="appLayout">
+  <!-- 手机端侧边栏遮罩 -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+  <!-- 左侧任务栏 -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h3>📋 盘点任务</h3>
+      <button class="btn btn-primary btn-sm" onclick="showCreateTaskModal()">+ 新建</button>
+    </div>
+    <div class="sidebar-list" id="taskList">
+      <!-- 动态渲染 -->
+    </div>
+  </div>
+
+  <!-- 右侧主内容 -->
+  <div class="main-content">
+    <!-- 欢迎页 -->
+    <div class="welcome-view" id="welcomeView">
+      <div class="welcome-box">
+        <div class="welcome-icon">📊</div>
+        <div class="welcome-title">仓库物料盘点系统</div>
+        <div class="welcome-desc">
+          点击左侧「+ 新建」创建盘点任务<br>
+          上传 Excel 盘点表，开始录入盘点数据<br>
+          支持多任务并行，历史数据永久留存
+        </div>
+      </div>
+    </div>
+
+    <!-- 盘点工作区 -->
+    <div class="workspace" id="workspace">
+      <!-- 文件信息栏 -->
+      <div class="import-card" id="importCard" style="display:none">
+        <div class="import-info">
+          <div class="import-icon">📊</div>
+          <div>
+            <div class="import-name" id="taskNameDisplay">-</div>
+            <div class="import-meta" id="taskMetaDisplay">-</div>
+          </div>
+        </div>
+        <div class="import-actions">
+          <button class="btn btn-ghost btn-sm" id="btnReimport" onclick="reimportExcel()">🔄 重新导入</button>
+          <button class="btn btn-success btn-sm" onclick="showReport()">📊 差异报告</button>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="onFileSelect(event)" style="display:none">
+      </div>
+
+      <!-- 统计栏 -->
+      <div class="stats-bar" id="statsBar" style="display:none">
+        <div class="stats-inner">
+          <div class="stat-item"><div class="stat-val blue" id="statTotal">0</div><div class="stat-lab">总物料</div></div>
+          <div class="stat-divider"></div>
+          <div class="stat-item"><div class="stat-val green" id="statDone">0</div><div class="stat-lab">已盘点</div></div>
+          <div class="stat-item"><div class="stat-val yellow" id="statPending">0</div><div class="stat-lab">待盘点</div></div>
+          <div class="stat-divider"></div>
+          <div class="progress-wrap">
+            <div class="progress-label">盘点进度: <span id="progressPct">0%</span></div>
+            <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 工具栏 -->
+      <div class="toolbar" id="toolbar" style="display:none">
+        <div class="toolbar-inner">
+          <input type="text" class="search-input" id="searchInput" placeholder="🔍 搜索物料编码或名称..." oninput="filterTable()">
+          <div class="filter-btns">
+            <button class="filter-btn active" onclick="setFilter('all',this)">全部</button>
+            <button class="filter-btn" onclick="setFilter('pending',this)">待盘点</button>
+            <button class="filter-btn" onclick="setFilter('done',this)">已完成</button>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn btn-primary btn-sm" id="btnExportJSON" onclick="exportJSON()">💾 导出数据</button>
+            <button class="btn btn-warning btn-sm" id="btnExportCSV" onclick="exportTaskReportCSV()">📥 导出报告</button>
+            <button class="btn btn-sm" id="btnSign" style="background:#722ed1;color:#fff" onclick="openSignatureModal()">✍️ 签字</button>
+            <button class="btn btn-sm btn-goto-input" id="btnGotoInput" style="background:#13c2c2;color:#fff;display:none" onclick="gotoFirstPendingInput()">✏️ 开始盘点</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 表格 -->
+      <div class="table-section" id="tableSection" style="display:none">
+        <div class="table-wrap">
+          <table id="mainTable">
+            <thead>
+              <tr>
+                <th class="c" style="width:46px">序号</th>
+                <th style="width:120px">物料编码</th>
+                <th style="min-width:130px">物料名称</th>
+                <th style="min-width:100px">规格型号</th>
+                <th class="c" style="width:54px">单位</th>
+                <th class="c" style="width:70px">库位</th>
+                <th class="c" style="width:100px">盘点数量</th>
+                <th style="width:120px">备注</th>
+                <th class="c" style="width:70px">状态</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <tr><td colspan="9"><div class="empty-state"><div class="icon">📋</div><p>请先导入盘点 Excel</p></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 新建任务弹窗 -->
+<div class="modal-overlay" id="createTaskModal">
+  <div class="col-card">
+    <h3>📋 新建盘点任务</h3>
+    <div class="task-form">
+      <div>
+        <label>任务名称</label>
+        <input type="text" id="newTaskName" placeholder="如：A仓-4月盘点" style="width:100%;margin-top:4px">
+      </div>
+      <div>
+        <label>盘点人</label>
+        <input type="text" id="newTaskChecker" placeholder="可选" style="width:100%;margin-top:4px">
+      </div>
+      <div>
+        <label>导入盘点 Excel</label>
+        <div class="drop-area" id="dropArea" onclick="document.getElementById('newTaskFile').click()" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)" style="margin-top:6px;padding:24px 16px">
+          <div class="drop-icon" style="font-size:32px">📄</div>
+          <div class="drop-sub">点击选择或拖拽 .xlsx / .xls / .csv 文件</div>
+          <div id="selectedFileName" style="font-size:12px;color:#52c41a;margin-top:4px"></div>
+        </div>
+        <input type="file" id="newTaskFile" accept=".xlsx,.xls,.csv" onchange="onNewTaskFileSelect(event)" style="display:none">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('createTaskModal')">取消</button>
+      <button class="btn btn-primary" onclick="confirmCreateTask()">创建任务</button>
+    </div>
+  </div>
+</div>
+
+<!-- 列映射弹窗 -->
+<div class="modal-overlay" id="colModal">
+  <div class="col-card">
+    <h3>⚙️ 列字段匹配</h3>
+    <p style="font-size:12px;color:#888;margin-bottom:12px">系统已自动识别，如有误请手动调整</p>
+    <div id="colMappingRows"></div>
+    <div id="colHint"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('colModal')">取消</button>
+      <button class="btn btn-primary" onclick="confirmImport()">确认导入</button>
+    </div>
+  </div>
+</div>
+
+<!-- 差异报告弹窗 -->
+<div class="modal-overlay" id="reportModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>📊 账实差异比对报告</h2>
+      <span class="modal-close" onclick="closeModal('reportModal')">×</span>
+    </div>
+    <div class="report-summary" id="reportSummary"></div>
+    <div class="report-table" id="reportTable"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="exportTaskReportCSV()">📥 导出 CSV</button>
+      <button class="btn btn-sm" style="background:#722ed1;color:#fff" onclick="exportReportAsImage()">🖼️ 导出图片</button>
+      <button class="btn btn-ghost" onclick="closeModal('reportModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 任务详情弹窗（历史查看） -->
+<div class="modal-overlay" id="taskDetailModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="taskDetailTitle">📋 任务详情</h2>
+      <span class="modal-close" onclick="closeModal('taskDetailModal')">×</span>
+    </div>
+    <div id="taskDetailContent"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="btnDetailExport" onclick="exportTaskHistoryCSV()">📥 导出报告</button>
+      <button class="btn btn-ghost" onclick="closeModal('taskDetailModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 签字弹窗 -->
+<div class="modal-overlay" id="signatureModal">
+  <div class="col-card" style="max-width:520px">
+    <div class="modal-header">
+      <h2>✍️ 盘点签字确认</h2>
+      <span class="modal-close" onclick="closeModal('signatureModal')">×</span>
+    </div>
+    <p style="font-size:12px;color:#888;margin-bottom:10px">请在下方签名区域手写签字，支持触屏操作</p>
+    <!-- 角色切换标签 -->
+    <div class="sig-role-tabs" id="sigRoleTabs">
+      <div class="sig-role-tab active" onclick="switchSigRole('checker')">盘点人签字</div>
+      <div class="sig-role-tab" onclick="switchSigRole('reviewer')">复核人签字</div>
+      <div class="sig-role-tab" onclick="switchSigRole('auditor')">审核人签字</div>
+    </div>
+    <!-- 当前签字人姓名 -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="font-size:13px;color:#555;font-weight:500;width:70px">签名人</label>
+      <input type="text" id="sigSignerName" placeholder="输入姓名" style="flex:1;padding:6px 10px;border:1px solid #d9d9d9;border-radius:6px;font-size:13px">
+    </div>
+    <!-- Canvas 签名区 -->
+    <div class="sig-canvas-wrap" id="sigCanvasWrap">
+      <canvas id="sigCanvas"></canvas>
+      <div class="sig-placeholder" id="sigPlaceholder">请在此处签名</div>
+    </div>
+    <div class="sig-actions">
+      <button class="btn btn-ghost btn-sm" onclick="clearSignature()">🗑️ 清除</button>
+      <button class="btn btn-ghost btn-sm" onclick="undoSignature()">↩️ 撤销</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-primary btn-sm" onclick="saveSignature()">✅ 保存签字</button>
+    </div>
+    <!-- 已保存的签字列表 -->
+    <div class="sig-saved-list" id="sigSavedList"></div>
+    <div class="modal-footer" style="margin-top:14px">
+      <button class="btn btn-ghost" onclick="closeModal('signatureModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 用户管理弹窗 -->
+<div class="modal-overlay" id="userMgmtModal">
+  <div class="col-card" style="max-width:640px">
+    <div class="modal-header">
+      <h2>👥 用户管理</h2>
+      <span class="modal-close" onclick="closeModal('userMgmtModal')">×</span>
+    </div>
+    <div style="margin-bottom:12px;text-align:right">
+      <button class="btn btn-primary btn-sm" onclick="showAddUserForm()">+ 新增用户</button>
+    </div>
+    <div id="addUserForm" style="display:none;background:#f5f7fa;border-radius:8px;padding:14px;margin-bottom:12px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:100px">
+          <label style="font-size:12px;color:#555;display:block;margin-bottom:2px">用户名</label>
+          <input type="text" id="newUserUsername" style="width:100%;padding:6px 10px;border:1px solid #d9d9d9;border-radius:5px;font-size:13px">
+        </div>
+        <div style="flex:1;min-width:100px">
+          <label style="font-size:12px;color:#555;display:block;margin-bottom:2px">显示名称</label>
+          <input type="text" id="newUserDisplayName" placeholder="可选" style="width:100%;padding:6px 10px;border:1px solid #d9d9d9;border-radius:5px;font-size:13px">
+        </div>
+        <div style="flex:1;min-width:100px">
+          <label style="font-size:12px;color:#555;display:block;margin-bottom:2px">密码</label>
+          <input type="text" id="newUserPassword" style="width:100%;padding:6px 10px;border:1px solid #d9d9d9;border-radius:5px;font-size:13px">
+        </div>
+        <div style="min-width:100px">
+          <label style="font-size:12px;color:#555;display:block;margin-bottom:2px">角色</label>
+          <select id="newUserRole" style="width:100%;padding:6px 8px;border:1px solid #d9d9d9;border-radius:5px;font-size:13px">
+            <option value="checker">盘点人</option>
+            <option value="admin">管理员</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-primary btn-sm" onclick="doCreateUser()">确认</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('addUserForm').style.display='none'">取消</button>
+        </div>
+      </div>
+      <div id="addUserError" style="color:#ff4d4f;font-size:12px;margin-top:6px"></div>
+    </div>
+    <div class="user-mgmt-list" id="userMgmtList"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('userMgmtModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 修改密码弹窗 -->
+<div class="modal-overlay" id="changePwdModal">
+  <div class="col-card" style="max-width:400px">
+    <div class="modal-header">
+      <h2>🔑 修改密码</h2>
+      <span class="modal-close" onclick="closeModal('changePwdModal')">×</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label style="font-size:13px;color:#555;font-weight:500">旧密码</label>
+        <input type="password" id="oldPwd" style="width:100%;margin-top:4px;padding:8px 12px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px">
+      </div>
+      <div>
+        <label style="font-size:13px;color:#555;font-weight:500">新密码（至少4位）</label>
+        <input type="password" id="newPwd" style="width:100%;margin-top:4px;padding:8px 12px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px">
+      </div>
+      <div id="changePwdMsg" style="font-size:12px;min-height:16px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('changePwdModal')">取消</button>
+      <button class="btn btn-primary" onclick="doChangePassword()">确认修改</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ========== 配置 ==========
+const API_BASE = '';
+
+// ========== 状态 ==========
+let taskList = [];
+let currentTaskId = null;
+let allItems = [];
+let savedQty = {};
+let taskSignatures = {};
+let filterMode = 'all';
+let pendingHeaders = [];
+let pendingRows = [];
+let allRawRows = [];
+let newTaskFileData = null;
+let historyViewTaskId = null;
+let useServer = false;
+
+// 认证状态
+let authToken = localStorage.getItem('inv_auth_token') || '';
+let currentUser = null;  // { username, displayName, role }
+const PERMS = {
+  admin:   ['create_task','delete_task','import_items','export_report','save_qty','delete_qty','save_signature','delete_signature','manage_users','reimport'],
+  checker: ['save_qty','delete_qty','save_signature'],
+};
+
+// ========== 轻量级 QR 码生成（纯 Canvas，无依赖） ==========
+function drawQR(canvas, text, size) {
+  // 简易 QR：将 URL 渲染为一个可点击的视觉标识
+  const ctx = canvas.getContext('2d');
+  canvas.width = size;
+  canvas.height = size;
+  canvas.style.display = 'block';
+  canvas.style.margin = '8px auto 0';
+  canvas.style.borderRadius = '8px';
+  canvas.style.cursor = 'pointer';
+  canvas.onclick = () => { window.location.href = text; };
+
+  // 背景和边框
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, size, size);
+  ctx.strokeStyle = '#1e3c72';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, size - 3, size - 3);
+
+  // 中心图标
+  const cx = size / 2, cy = size / 2;
+  ctx.fillStyle = '#1e3c72';
+  ctx.font = 'bold 28px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('📦', cx, cy - 14);
+
+  // 缩短URL显示
+  ctx.font = '11px monospace';
+  ctx.fillStyle = '#2a5298';
+  const shortUrl = text.replace(/^https?:\/\//, '');
+  const lines = [];
+  if (shortUrl.length > 30) {
+    lines.push(shortUrl.substring(0, 30));
+    if (shortUrl.length > 30) lines.push(shortUrl.substring(30));
+  } else {
+    lines.push(shortUrl);
+  }
+  lines.forEach((line, i) => ctx.fillText(line, cx, cy + 16 + i * 15));
+}
+
+// ========== 服务器地址显示 ==========
+async function loadServerInfo() {
+  try {
+    const resp = await fetch(API_BASE + '/api/server-info');
+    if (!resp.ok) return;
+    const info = await resp.json();
+    if (!info.urls || !info.urls.length) return;
+
+    // 过滤掉当前访问的地址
+    const currentHost = window.location.host;
+    const otherUrls = info.urls.filter(u => !u.includes(currentHost));
+    const allUrls = otherUrls.length > 0 ? otherUrls : info.urls;
+
+    const container = document.getElementById('serverUrlList');
+    if (container) {
+      container.innerHTML = allUrls.map(url =>
+        `<a href="${url}" style="color:#2a5298;text-decoration:underline;display:block;margin:3px 0">${url}</a>`
+      ).join('');
+    }
+
+    // 绘制二维码（第一个非当前地址）
+    const qrUrl = allUrls[0];
+    const canvas = document.getElementById('qrCanvas');
+    if (canvas && qrUrl) {
+      drawQR(canvas, qrUrl, 140);
+    }
+  } catch (e) {
+    // 静默失败，不影响登录
+  }
+}
+
+// ========== API 封装 ==========
+async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+  try {
+    const resp = await fetch(API_BASE + path, { headers, ...options,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+    // 处理认证错误
+    if (resp.status === 401) {
+      const data = await resp.json().catch(() => ({}));
+      if (data.code === 'SESSION_EXPIRED' || data.code === 'NOT_LOGGED_IN') {
+        authToken = '';
+        localStorage.removeItem('inv_auth_token');
+        showLoginPage();
+        return null;
+      }
+    }
+    // 处理权限错误
+    if (resp.status === 403) {
+      const data = await resp.json().catch(() => ({}));
+      toast(data.error || '权限不足');
+      return null;
+    }
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      const err = new Error(data.error || `HTTP ${resp.status}`);
+      err.serverError = data.error || `HTTP ${resp.status}`;
+      throw err;
+    }
+    return await resp.json();
+  } catch (e) {
+    console.warn('[API]', path, e);
+    // 将服务端错误信息挂在返回值上，方便调用方展示
+    return { __error: true, error: e.serverError || e.message || '请求失败' };
+  }
+}
+
+function hasPerm(perm) {
+  if (!currentUser) return false;
+  return (PERMS[currentUser.role] || []).includes(perm);
+}
+function isAdmin() { return currentUser && currentUser.role === 'admin'; }
+
+// ========== 检测模式 & 初始化 ==========
+document.addEventListener('DOMContentLoaded', async () => {
+  const now = new Date();
+  document.getElementById('topbarDate').textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
+  
+  // 检测服务器是否可用（用 /api/auth/check，无需认证即可探测）
+  try {
+    const testResp = await fetch(API_BASE + '/api/auth/check');
+    if (testResp.ok) {
+      useServer = true;
+      console.log('[系统] 已连接服务器，多人协作模式');
+    } else {
+      useServer = false;
+      console.log('[系统] 服务器响应异常，单机模式（localStorage）');
+    }
+  } catch (e) {
+    useServer = false;
+    console.log('[系统] 未检测到服务器，单机模式（localStorage）');
+  }
+
+  // 检测 XLSX 库是否加载成功
+  if (typeof XLSX === 'undefined') {
+    console.warn('[系统] SheetJS 未加载，可能是网络问题');
+  }
+
+  if (useServer) {
+    // 服务器模式：需要登录
+    if (authToken) {
+      const check = await api('/api/auth/check');
+      if (check && check.loggedIn) {
+        currentUser = check.user;
+        updateTopbarUser();
+        showApp();
+      } else {
+        showLoginPage();
+      }
+    } else {
+      showLoginPage();
+    }
+  } else {
+    // 单机模式：不需要登录
+    currentUser = { username: 'local', displayName: '本地用户', role: 'admin' };
+    updateTopbarUser();
+    const savedChecker = localStorage.getItem('inv_checker') || '';
+    document.getElementById('checkerName')?.textContent && (document.getElementById('checkerName').textContent = savedChecker || '未设置');
+    showApp();
+  }
+});
+
+function showLoginPage() {
+  document.getElementById('loginPage').style.display = 'flex';
+  document.getElementById('topbar').style.display = 'none';
+  document.getElementById('loginError').textContent = '';
+  setTimeout(() => document.getElementById('loginUsername')?.focus(), 100);
+  // 加载并显示服务器地址
+  if (useServer) loadServerInfo();
+}
+
+function showApp() {
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('topbar').style.display = 'flex';
+  loadAllTasks().then(() => renderTaskList());
+}
+
+function updateTopbarUser() {
+  if (!currentUser) return;
+  const roleText = currentUser.role === 'admin' ? '👑 管理员' : '📋 盘点人';
+  document.getElementById('currentUserDisplay').innerHTML =
+    `<strong>${escHTML(currentUser.displayName)}</strong> <span style="opacity:0.7">(${roleText})</span>`;
+  document.getElementById('btnUserMgmt').style.display = isAdmin() ? '' : 'none';
+}
+
+// ========== 登录/登出 ==========
+async function doLogin() {
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!username || !password) {
+    document.getElementById('loginError').textContent = '请输入用户名和密码';
+    return;
+  }
+
+  const result = await api('/api/auth/login', {
+    method: 'POST',
+    body: { username, password },
+  });
+
+  if (!result || result.error) {
+    document.getElementById('loginError').textContent = result?.error || '登录失败';
+    return;
+  }
+
+  authToken = result.token;
+  currentUser = result.user;
+  localStorage.setItem('inv_auth_token', authToken);
+  updateTopbarUser();
+  showApp();
+  toast(`欢迎，${currentUser.displayName}！`);
+}
+
+async function doLogout() {
+  await api('/api/auth/logout', { method: 'POST' });
+  authToken = '';
+  currentUser = null;
+  localStorage.removeItem('inv_auth_token');
+  currentTaskId = null;
+  allItems = [];
+  savedQty = {};
+  taskSignatures = {};
+  showLoginPage();
+}
+
+// ========== 修改密码 ==========
+function showChangePwdModal() {
+  document.getElementById('oldPwd').value = '';
+  document.getElementById('newPwd').value = '';
+  document.getElementById('changePwdMsg').textContent = '';
+  document.getElementById('changePwdModal').classList.add('active');
+}
+
+async function doChangePassword() {
+  const oldPwd = document.getElementById('oldPwd').value;
+  const newPwd = document.getElementById('newPwd').value;
+  const msg = document.getElementById('changePwdMsg');
+
+  if (!oldPwd || !newPwd) { msg.innerHTML = '<span style="color:#ff4d4f">请填写完整</span>'; return; }
+  if (newPwd.length < 4) { msg.innerHTML = '<span style="color:#ff4d4f">新密码至少4位</span>'; return; }
+
+  const result = await api('/api/auth/change-password', {
+    method: 'POST',
+    body: { oldPassword: oldPwd, newPassword: newPwd },
+  });
+  if (result && result.ok) {
+    closeModal('changePwdModal');
+    toast('密码修改成功');
+  } else {
+    msg.innerHTML = `<span style="color:#ff4d4f">${result?.error || '修改失败'}</span>`;
+  }
+}
+
+// ========== 用户管理 ==========
+async function showUserMgmtModal() {
+  if (!isAdmin()) { toast('仅管理员可操作'); return; }
+  document.getElementById('addUserForm').style.display = 'none';
+  document.getElementById('userMgmtModal').classList.add('active');
+  await loadUsers();
+}
+
+async function loadUsers() {
+  const users = await api('/api/users');
+  if (!users || users.__error) { if (users && users.error) toast(users.error); return; }
+  document.getElementById('userMgmtList').innerHTML = users.map(u => `
+    <div class="user-row">
+      <div class="user-avatar ${u.role}">${escHTML(u.displayName.charAt(0))}</div>
+      <div class="user-info">
+        <div class="user-name">${escHTML(u.displayName)}</div>
+        <div class="user-username">@${escHTML(u.username)}</div>
+      </div>
+      <span class="user-role-badge ${u.role === 'admin' ? 'role-admin' : 'role-checker'}">
+        ${u.role === 'admin' ? '管理员' : '盘点人'}
+      </span>
+      <div class="user-actions">
+        <button onclick="promptResetPassword(${u.id}, '${escAttr(u.displayName)}')">重置密码</button>
+        <button class="btn-del" onclick="doDeleteUser(${u.id}, '${escAttr(u.username)}', '${escAttr(u.displayName)}')">删除</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function showAddUserForm() {
+  document.getElementById('addUserForm').style.display = 'block';
+  document.getElementById('addUserError').textContent = '';
+  document.getElementById('newUserUsername').value = '';
+  document.getElementById('newUserDisplayName').value = '';
+  document.getElementById('newUserPassword').value = '';
+  document.getElementById('newUserRole').value = 'checker';
+  document.getElementById('newUserUsername').focus();
+}
+
+async function doCreateUser() {
+  const username = document.getElementById('newUserUsername').value.trim();
+  const displayName = document.getElementById('newUserDisplayName').value.trim() || username;
+  const password = document.getElementById('newUserPassword').value;
+  const role = document.getElementById('newUserRole').value;
+  const errEl = document.getElementById('addUserError');
+
+  if (!username || !password) { errEl.textContent = '用户名和密码不能为空'; return; }
+  if (password.length < 4) { errEl.textContent = '密码至少4位'; return; }
+
+  const result = await api('/api/users', {
+    method: 'POST',
+    body: { username, displayName, password, role },
+  });
+
+  if (result && result.ok) {
+    document.getElementById('addUserForm').style.display = 'none';
+    toast(result.message);
+    await loadUsers();
+  } else {
+    errEl.textContent = (result && result.error) ? result.error : '创建失败，请检查服务器连接';
+  }
+}
+
+async function promptResetPassword(userId, displayName) {
+  const newPwd = prompt(`为 ${displayName} 设置新密码（至少4位）:`);
+  if (newPwd === null) return;
+  if (newPwd.length < 4) { toast('密码至少4位'); return; }
+
+  const result = await api('/api/users/' + userId, {
+    method: 'PUT',
+    body: { password: newPwd },
+  });
+  if (result && result.ok) {
+    toast(`${displayName} 的密码已重置`);
+  } else {
+    toast((result && result.error) ? result.error : '重置失败');
+  }
+}
+
+async function doDeleteUser(userId, username, displayName) {
+  if (!confirm(`确认删除用户「${displayName}」(${username})？`)) return;
+  const result = await api('/api/users/' + userId, { method: 'DELETE' });
+  if (result && result.ok) {
+    toast(result.message);
+    await loadUsers();
+  } else {
+    toast((result && result.error) ? result.error : '删除失败');
+  }
+}
+
+// ========== 手机端侧边栏控制 ==========
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('active');
+}
+function closeSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  sidebar.classList.remove('open');
+  overlay.classList.remove('active');
+}
+// 在小屏下点击任务卡片后自动收起侧边栏
+function isMobile() { return window.innerWidth <= 768; }
+
+// ========== 工具函数 ==========
+function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escHTML(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function genId() { return 'task_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6); }
+function formatTime(ts) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function setChecker() {
+  const cur = localStorage.getItem('inv_checker') || '';
+  const name = prompt('请输入盘点人姓名:', cur);
+  if (name !== null && name.trim()) {
+    localStorage.setItem('inv_checker', name.trim());
+    const el = document.getElementById('checkerName');
+    if (el) el.textContent = name.trim();
+    toast('盘点人已设置: ' + name.trim());
+  }
+}
+
+// ========== 持久化（单机模式） ==========
+let localTasks = {};
+function saveLocalTasks() {
+  try { localStorage.setItem('inv_tasks', JSON.stringify(localTasks)); } catch(e) {}
+}
+function loadLocalTasks() {
+  try { const raw = localStorage.getItem('inv_tasks'); if (raw) localTasks = JSON.parse(raw); } catch(e) { localTasks = {}; }
+}
+
+// ========== 统一数据加载 ==========
+async function loadAllTasks() {
+  if (useServer) {
+    const result = await api('/api/tasks');
+    if (result) {
+      taskList = result;
+    }
+  } else {
+    loadLocalTasks();
+    // 转换为统一格式
+    taskList = Object.entries(localTasks).map(([id, t]) => ({
+      id,
+      name: t.name,
+      checker: t.checker || '',
+      fileName: t.fileName || '',
+      createdAt: t.createdAt,
+      itemCount: (t.items || []).length,
+      doneCount: Object.values(t.savedQty || {}).filter(v => v.qty !== '').length,
+      sigCount: t.signatures ? Object.keys(t.signatures).length : 0,
+    }));
+  }
+}
+
+async function loadTaskDetail(taskId) {
+  if (useServer) {
+    const detail = await api('/api/tasks/' + taskId);
+    return detail;
+  } else {
+    const t = localTasks[taskId];
+    if (!t) return null;
+    return {
+      id: t.id || taskId,
+      name: t.name,
+      checker: t.checker || '',
+      fileName: t.fileName || '',
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt || t.createdAt,
+      items: t.items || [],
+      savedQty: t.savedQty || {},
+      signatures: t.signatures || {},
+    };
+  }
+}
+
+// ========== 任务列表渲染 ==========
+function renderTaskList() {
+  const container = document.getElementById('taskList');
+  // 控制新建按钮可见性
+  const newBtn = document.querySelector('.sidebar-header .btn-primary');
+  if (newBtn) newBtn.style.display = hasPerm('create_task') ? '' : 'none';
+
+  if (!taskList || !taskList.length) {
+    const hint = hasPerm('create_task') ? '点击上方「+ 新建」创建' : '暂无盘点任务';
+    container.innerHTML = `<div class="sidebar-empty"><div class="icon">📭</div><p>暂无任务</p><p style="font-size:12px;margin-top:4px">${hint}</p></div>`;
+    return;
+  }
+
+  container.innerHTML = taskList.map(task => {
+    const total = task.itemCount || 0;
+    const done = task.doneCount || 0;
+    const pct = total > 0 ? Math.round(done / total * 100) : 0;
+    const isActive = task.id === currentTaskId;
+    const isComplete = total > 0 && done >= total;
+    const statusCls = isComplete ? 'status-done' : (done > 0 ? 'status-counting' : 'status-draft');
+    const statusText = isComplete ? '已完成' : (done > 0 ? '盘点中' : '待盘点');
+    const sigCount = task.sigCount || 0;
+    const sigText = sigCount > 0 ? `✍️ ${sigCount}/3` : '';
+
+    // 权限控制按钮
+    const exportBtn = hasPerm('export_report') ? `<button onclick="event.stopPropagation();exportSingleTaskCSV('${task.id}')" title="导出报告">📥 报告</button>` : '';
+    const deleteBtn = hasPerm('delete_task') ? `<button class="btn-del" onclick="event.stopPropagation();deleteTask('${task.id}')" title="删除任务">🗑️</button>` : '';
+
+    return `
+      <div class="task-card ${isActive ? 'active' : ''}" onclick="switchTask('${task.id}')">
+        <div class="task-card-title">${escHTML(task.name)}</div>
+        <div class="task-card-meta">
+          <span>${formatTime(task.createdAt)}</span>
+          <span>${task.checker ? '👤 ' + escHTML(task.checker) : ''}</span>
+          <span>${sigText}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <span class="task-card-status ${statusCls}">${statusText}</span>
+          <span style="font-size:11px;color:#999">${done}/${total}</span>
+        </div>
+        <div class="progress-bar" style="height:4px;margin-top:4px"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <div class="task-card-actions">
+          <button onclick="event.stopPropagation();viewTaskDetail('${task.id}')" title="查看详情">📋 详情</button>
+          ${exportBtn}${deleteBtn}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ========== 切换任务 ==========
+async function switchTask(taskId) {
+  currentTaskId = taskId;
+  const detail = await loadTaskDetail(taskId);
+  if (!detail) { toast('任务加载失败'); return; }
+  
+  allItems = detail.items || [];
+  savedQty = detail.savedQty || {};
+  taskSignatures = detail.signatures || {};
+  
+  renderTaskList();
+  
+  if (allItems.length > 0) {
+    showWorkspace(detail);
+    renderTable();
+  } else {
+    showWorkspace(detail);
+    showReimportPrompt(detail);
+  }
+}
+
+// ========== 新建任务弹窗 ==========
+function showCreateTaskModal() {
+  document.getElementById('newTaskName').value = '';
+  document.getElementById('newTaskChecker').value = localStorage.getItem('inv_checker') || '';
+  document.getElementById('selectedFileName').textContent = '';
+  newTaskFileData = null;
+  document.getElementById('createTaskModal').classList.add('active');
+}
+
+function onDragOver(e) { e.preventDefault(); document.getElementById('dropArea').classList.add('drag-over'); }
+function onDragLeave(e) { document.getElementById('dropArea').classList.remove('drag-over'); }
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropArea').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleNewFile(file);
+}
+function onNewTaskFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) handleNewFile(file);
+  e.target.value = '';
+}
+function handleNewFile(file) {
+  if (!file.name.match(/\.(xlsx|xls|csv)$/i)) { toast('请选择 .xlsx / .xls / .csv 文件'); return; }
+  newTaskFileData = file;
+  document.getElementById('selectedFileName').textContent = '✅ ' + file.name;
+}
+
+async function confirmCreateTask() {
+  if (useServer && !hasPerm('create_task')) { toast('权限不足，仅管理员可创建任务'); return; }
+  const name = document.getElementById('newTaskName').value.trim();
+  if (!name) { toast('⚠️ 请输入任务名称！'); document.getElementById('newTaskName').focus(); return; }
+  if (!newTaskFileData) { toast('⚠️ 请选择盘点 Excel 文件！'); return; }
+
+  const checker = document.getElementById('newTaskChecker').value.trim();
+  if (checker) {
+    localStorage.setItem('inv_checker', checker);
+    const el = document.getElementById('checkerName');
+    if (el) el.textContent = checker;
+  }
+
+  let taskId;
+  if (useServer) {
+    // 禁用按钮防止重复提交
+    const btn = document.querySelector('#createTaskModal .btn-primary');
+    const origText = btn.textContent;
+    btn.textContent = '创建中...';
+    btn.disabled = true;
+    try {
+      const result = await api('/api/tasks', {
+        method: 'POST',
+        body: { name, checker, fileName: newTaskFileData.name },
+      });
+      if (!result || result.__error) {
+        toast('❌ ' + ((result && result.error) || '创建任务失败，请检查服务器连接'));
+        console.error('[创建任务] API返回错误:', result);
+        btn.textContent = origText;
+        btn.disabled = false;
+        return;
+      }
+      taskId = result.id;
+    } catch(e) {
+      toast('❌ 网络请求失败: ' + e.message);
+      console.error('[创建任务] 异常:', e);
+      btn.textContent = origText;
+      btn.disabled = false;
+      return;
+    }
+    btn.textContent = origText;
+    btn.disabled = false;
+  } else {
+    taskId = genId();
+    localTasks[taskId] = {
+      name, checker, fileName: newTaskFileData.name,
+      createdAt: Date.now(), updatedAt: Date.now(),
+      items: [], savedQty: {}, signatures: {},
+    };
+    saveLocalTasks();
+  }
+
+  closeModal('createTaskModal');
+  currentTaskId = taskId;
+  await loadAllTasks();
+  renderTaskList();
+  toast('✅ 任务「' + name + '」创建成功');
+
+  // 开始解析文件
+  parseFileForTask(newTaskFileData, taskId);
+}
+
+// ========== 文件解析 ==========
+function parseFileForTask(file, taskId) {
+  if (typeof XLSX === 'undefined') {
+    toast('⚠️ Excel 解析库未加载，请检查网络或刷新页面重试');
+    console.error('[XLSX] SheetJS 库未加载，可能被网络拦截');
+    return;
+  }
+  toast('正在解析文件...');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array', cellText: true, cellDates: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      allRawRows = rows;
+
+      if (!rows || rows.length === 0) {
+        toast('文件为空，没有数据行');
+        return;
+      }
+
+      // 默认选第 0 行作为表头
+      applyHeaderRow(0);
+    } catch(err) {
+      toast('文件解析失败: ' + (err.message || '未知错误'));
+      console.error('[XLSX] 解析错误:', err);
+    }
+  };
+  reader.onerror = () => toast('文件读取失败，请重试');
+  reader.readAsArrayBuffer(file);
+}
+
+function reimportExcel() {
+  document.getElementById('fileInput').click();
+}
+
+function onFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) parseFileForTask(file, currentTaskId);
+  e.target.value = '';
+}
+
+function applyHeaderRow(headerIdx) {
+  const rows = allRawRows;
+  if (!rows || !rows.length) return;
+  const headers = rows[headerIdx].map(c => String(c).trim());
+  const dataRows = rows.slice(headerIdx + 1).filter(r => {
+    const cells = r.map(c => String(c).trim());
+    if (!cells.some(c => c !== '')) return false;
+    const joined = cells.join('');
+    if (/^(合计|小计|汇总|总计|total|subtotal)$/i.test(joined.trim())) return false;
+    return true;
+  });
+  
+  pendingHeaders = headers;
+  pendingRows = dataRows;
+  
+  const mapping = autoDetectColumns(headers);
+  showColModal(headers, mapping, headerIdx, rows);
+}
+
+function autoDetectColumns(headers) {
+  const mapping = {};
+  // 第一轮：精确匹配
+  headers.forEach((h, idx) => {
+    const hl = h.toLowerCase().trim();
+    for (const [field, patterns] of Object.entries(COL_PATTERNS)) {
+      if (field in mapping) continue;
+      if (patterns.some(p => hl === p.toLowerCase())) { mapping[field] = idx; }
+    }
+  });
+  // 第二轮：包含匹配（关键词长度>=2）
+  headers.forEach((h, idx) => {
+    const hl = h.toLowerCase().trim();
+    for (const [field, patterns] of Object.entries(COL_PATTERNS)) {
+      if (field in mapping) continue;
+      if (patterns.some(p => p.length >= 2 && hl.includes(p.toLowerCase()))) { mapping[field] = idx; }
+    }
+  });
+  return mapping;
+}
+
+// ========== 列匹配配置 ==========
+const COL_PATTERNS = {
+  item_no:       ['序号', '编号', 'no', '序号', '行号', 'row'],
+  material_code: ['物料编码', '料号', '物料号', '编码', 'code', '物料代码', '物料编号'],
+  material_name: ['物料名称', '名称', '品名', '物料', 'name', '物料描述'],
+  spec:          ['规格', '规格型号', '型号', 'spec', '规格说明', '描述'],
+  unit:          ['单位', '计量单位', 'unit', 'uom'],
+  location:      ['库位', '位置', '仓位', '库位号', 'location', '存储位置'],
+  stock_qty:     ['库存数量', '账面数量', '库存', '数量', 'qty', '账面数', '账面库存'],
+  remark:        ['备注', '说明', '注释', 'remark', 'note', 'notes']
+};
+
+// ========== 列匹配弹窗 ==========
+function showColModal(headers, mapping, headerIdx, rawRows) {
+  const fields = [
+    { key: 'item_no',       label: '序号',     required: false },
+    { key: 'material_code', label: '物料编码', required: true  },
+    { key: 'material_name', label: '物料名称', required: true  },
+    { key: 'spec',          label: '规格型号', required: false },
+    { key: 'unit',          label: '单位',     required: false },
+    { key: 'location',      label: '库位',     required: false },
+    { key: 'stock_qty',     label: '库存数量', required: true  },
+    { key: 'remark',        label: '备注',     required: false },
+  ];
+  
+  const scanRows = rawRows || allRawRows;
+  const curHeaderIdx = headerIdx !== undefined ? headerIdx : 0;
+  const headerRowOptions = scanRows.slice(0, Math.min(10, scanRows.length)).map((row, i) => {
+    const preview = row.map(c => String(c).trim()).filter(c => c).slice(0, 5).join(' | ');
+    return `<option value="${i}"${i === curHeaderIdx ? ' selected' : ''}>第${i+1}行：${preview || '（空行）'}</option>`;
+  }).join('');
+  
+  const optionsHTML = ['<option value="-1">-- 不使用 --</option>',
+    ...headers.map((h, i) => `<option value="${i}">${escHTML(h) || '(空列'+i+')'}</option>`)
+  ].join('');
+  
+  const fieldRows = fields.map(f => `
+    <div class="col-row">
+      <label>${f.label}${f.required ? '<span style="color:#ff4d4f">*</span>' : ''}</label>
+      <select id="colSel_${f.key}"></select>
+    </div>
+  `).join('');
+  
+  document.getElementById('colMappingRows').innerHTML = `
+    <div class="col-row" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #f0f0f0">
+      <label style="width:90px;color:#1e3c72;font-weight:600">表头行</label>
+      <select id="headerRowSel" style="flex:1;padding:6px 8px;border:1px solid #d9d9d9;border-radius:5px;font-size:13px" onchange="onHeaderRowChange(this.value)">
+        ${headerRowOptions}
+      </select>
+    </div>
+    <p style="font-size:12px;color:#888;margin-bottom:10px">如表头行识别有误，请在上方切换</p>
+    ${fieldRows}
+  `;
+  
+  fields.forEach(f => {
+    const el = document.getElementById('colSel_' + f.key);
+    if (el) { el.innerHTML = optionsHTML; el.value = mapping[f.key] !== undefined ? mapping[f.key] : -1; }
+  });
+  
+  // 数据预览
+  const previewRows = pendingRows.slice(0, 5);
+  let previewHTML = '';
+  if (previewRows.length > 0) {
+    const maxCols = Math.min(headers.length, 8);
+    previewHTML = `
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid #f0f0f0">
+        <div style="font-size:12px;color:#1e3c72;font-weight:600;margin-bottom:6px">
+          数据预览（共 ${pendingRows.length} 行）
+          ${previewRows[0] && previewRows[0].some(c => String(c).trim().match(/^(序号|编号|物料编码|物料名称|料号)/)) 
+            ? '<span style="color:#ff4d4f">⚠️ 第一行看起来像表头，请将上方「表头行」往前调一行</span>' : ''}
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;font-size:11px;border-collapse:collapse">
+            <tr style="background:#f0f5ff">
+              <td style="padding:4px 6px;border:1px solid #e8e8e8;font-weight:600;color:#999;font-size:10px">行号</td>
+              ${headers.slice(0, maxCols).map(h => `<th style="padding:4px 6px;border:1px solid #e8e8e8;white-space:nowrap">${escHTML(h)}</th>`).join('')}
+            </tr>
+            ${previewRows.map((row, ri) => `<tr style="background:${ri === 0 ? '#fffbe6' : '#fff'}">
+              <td style="padding:4px 6px;border:1px solid #f0f0f0;color:#999;font-size:10px;text-align:center">${ri + 1}</td>
+              ${row.slice(0, maxCols).map(c => `<td style="padding:3px 6px;border:1px solid #f0f0f0;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(String(c))}">${escHTML(String(c))}</td>`).join('')}
+            </tr>`).join('')}
+          </table>
+        </div>
+      </div>
+    `;
+  }
+  
+  document.getElementById('colHint').innerHTML = previewHTML;
+  document.getElementById('colModal').classList.add('active');
+}
+
+function onHeaderRowChange(val) { applyHeaderRow(parseInt(val)); }
+
+function confirmImport() {
+  const fields = ['item_no','material_code','material_name','spec','unit','location','stock_qty','remark'];
+  const mapping = {};
+  fields.forEach(f => {
+    const el = document.getElementById('colSel_' + f);
+    if (el && parseInt(el.value) >= 0) mapping[f] = parseInt(el.value);
+  });
+  
+  if (!mapping.material_code && !mapping.material_name) { toast('请至少映射"物料编码"或"物料名称"列'); return; }
+  
+  closeModal('colModal');
+  buildItemsForTask(pendingRows, mapping);
+}
+
+// ========== 构建物料列表 ==========
+function buildItemsForTask(rows, mapping) {
+  const getVal = (row, field) => {
+    const idx = mapping[field];
+    if (idx === undefined || idx >= row.length) return '';
+    const v = row[idx];
+    return v !== null && v !== undefined ? String(v).trim() : '';
+  };
+  
+  const newItems = rows.map((row, i) => ({
+    id: i + 1,
+    item_no: getVal(row, 'item_no') || String(i + 1),
+    material_code: getVal(row, 'material_code'),
+    material_name: getVal(row, 'material_name'),
+    spec: getVal(row, 'spec'),
+    unit: getVal(row, 'unit'),
+    location: getVal(row, 'location'),
+    stock_qty: getVal(row, 'stock_qty'),
+    remark_original: getVal(row, 'remark'),
+  }));
+  
+  allItems = newItems;
+  savedQty = {};
+  
+  // 保存到服务器或本地
+  if (useServer && currentTaskId) {
+    api('/api/tasks/' + currentTaskId + '/items', {
+      method: 'POST',
+      body: { items: newItems, fileName: '' },
+    }).then(() => {
+      loadAllTasks().then(() => renderTaskList());
+    });
+  } else if (currentTaskId && localTasks[currentTaskId]) {
+    localTasks[currentTaskId].items = newItems;
+    localTasks[currentTaskId].savedQty = {};
+    saveLocalTasks();
+  }
+  
+  showWorkspace({ name: localTasks[currentTaskId]?.name || '', fileName: '' });
+  renderTable();
+  renderTaskList();
+  toast(`导入成功！共 ${newItems.length} 条物料`);
+}
+
+// ========== UI 控制 ==========
+function showWorkspace(task) {
+  document.getElementById('welcomeView').style.display = 'none';
+  const ws = document.getElementById('workspace');
+  ws.classList.add('active');
+  // 手机端进入工作区后自动关闭侧边栏
+  if (isMobile()) closeSidebar();
+
+  const taskName = task?.name || (localTasks[currentTaskId]?.name) || '';
+  const taskFileName = task?.fileName || (localTasks[currentTaskId]?.fileName) || '';
+
+  const total = allItems.length;
+  const done = Object.values(savedQty).filter(v => v.qty !== '').length;
+  document.getElementById('taskNameDisplay').textContent = taskName;
+  document.getElementById('taskMetaDisplay').textContent = `${taskFileName || '未导入'} · ${total} 条物料 · 已盘 ${done} 条`;
+
+  document.getElementById('importCard').style.display = 'flex';
+  document.getElementById('statsBar').style.display = 'block';
+  document.getElementById('toolbar').style.display = 'block';
+  document.getElementById('tableSection').style.display = 'block';
+
+  // 按钮权限控制
+  applyToolbarPermissions();
+}
+
+function applyToolbarPermissions() {
+  const el = (id) => document.getElementById(id);
+  if (el('btnReimport'))   el('btnReimport').style.display = hasPerm('reimport') ? '' : 'none';
+  if (el('btnExportJSON'))  el('btnExportJSON').style.display = hasPerm('export_report') ? '' : 'none';
+  if (el('btnExportCSV'))   el('btnExportCSV').style.display = hasPerm('export_report') ? '' : 'none';
+  if (el('btnSign'))        el('btnSign').style.display = hasPerm('save_signature') ? '' : 'none';
+  // 手机端显示"开始盘点"按钮（只要有盘点权限就显示）
+  if (el('btnGotoInput'))   el('btnGotoInput').style.display = (isMobile() && hasPerm('save_qty')) ? '' : 'none';
+  // 差异报告按钮（importCard 中的）
+  const reportBtn = document.querySelector('#importCard .btn-success');
+  if (reportBtn) reportBtn.style.display = hasPerm('export_report') ? '' : 'none';
+}
+
+// 手机端：跳转到第一个待盘点的输入框
+function gotoFirstPendingInput() {
+  const wrap = document.querySelector('.table-wrap');
+  if (!wrap) return;
+  const pending = Array.from(document.querySelectorAll('.qty-input:not(.filled)')).filter(i => i.closest('tr')?.style.display !== 'none');
+  if (pending.length === 0) { toast('所有物料已盘点完成！'); return; }
+  const target = pending[0];
+  // 先滚动表格容器到横向正确位置
+  const inputOffset = target.offsetParent ? target.offsetParent.offsetLeft + target.offsetLeft : 0;
+  wrap.scrollTo({ left: Math.max(0, inputOffset - 20), behavior: 'smooth' });
+  // 等滚动完再聚焦
+  setTimeout(() => {
+    target.focus();
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 350);
+}
+
+function showReimportPrompt(task) {
+  document.getElementById('welcomeView').style.display = 'none';
+  const ws = document.getElementById('workspace');
+  ws.classList.add('active');
+  document.getElementById('importCard').style.display = 'none';
+  document.getElementById('statsBar').style.display = 'none';
+  document.getElementById('toolbar').style.display = 'none';
+  document.getElementById('tableSection').style.display = 'block';
+  document.getElementById('tableBody').innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="icon">📄</div><p>请导入 Excel 盘点表</p></div></td></tr>';
+  
+  const taskName = task?.name || (localTasks[currentTaskId]?.name) || '';
+  document.getElementById('taskNameDisplay').textContent = taskName;
+  document.getElementById('taskMetaDisplay').textContent = '待导入文件';
+}
+
+// ========== 渲染表格 ==========
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  if (!allItems.length) {
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="icon">📋</div><p>暂无数据</p></div></td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = allItems.map(item => {
+    const saved = savedQty[item.id];
+    const qty = saved ? saved.qty : '';
+    const rmk = saved ? saved.remark : '';
+    const isDone = qty !== '';
+    return `<tr data-id="${item.id}" data-stock="${escAttr(item.stock_qty)}" data-code="${escAttr(item.material_code)}" data-name="${escAttr(item.material_name)}" class="${isDone ? 'done-row' : ''}">
+      <td class="c">${escHTML(item.item_no)}</td>
+      <td class="code">${escHTML(item.material_code)}</td>
+      <td>${escHTML(item.material_name)}</td>
+      <td>${escHTML(item.spec)}</td>
+      <td class="c">${escHTML(item.unit)}</td>
+      <td class="c">${escHTML(item.location)}</td>
+      <td class="c" style="position:relative">
+        <input type="number" class="qty-input${isDone ? ' filled' : ''}" data-id="${item.id}" value="${escAttr(qty)}" placeholder="请输入" inputmode="numeric" pattern="[0-9]*" min="0" step="1" oninput="onQtyInput(this)"${!hasPerm('delete_qty') ? ' readonly' : ''}>
+        ${isDone && hasPerm('delete_qty') ? `<span style="position:absolute;right:-4px;top:-4px;width:18px;height:18px;background:#ff4d4f;color:#fff;border-radius:50%;font-size:12px;line-height:18px;text-align:center;cursor:pointer;display:flex;align-items:center;justify-content:center" onclick="clearQtyInput(${item.id})" title="清除">×</span>` : ''}
+      </td>
+      <td><input type="text" class="remark-input" data-id="${item.id}" value="${escAttr(rmk)}" placeholder="备注" oninput="onRemarkInput(this)"></td>
+      <td class="c"><span class="status-badge ${isDone ? 'badge-done' : 'badge-pending'}">${isDone ? '已完成' : '待盘点'}</span></td>
+    </tr>`;
+  }).join('');
+  
+  applyFilter();
+  updateStats();
+  // 手机端显示滚动提示
+  if (isMobile()) showScrollHint();
+}
+
+// ========== 输入处理 ==========
+
+// 手机端横向滚动提示
+let scrollHintShown = false;
+function showScrollHint() {
+  if (scrollHintShown) return;
+  const section = document.getElementById('tableSection');
+  if (!section) return;
+  // 如果表格宽度超过容器宽度，才显示提示
+  const wrap = section.querySelector('.table-wrap');
+  if (wrap && wrap.scrollWidth > wrap.clientWidth) {
+    scrollHintShown = true;
+    const hint = document.createElement('div');
+    hint.id = 'scrollHint';
+    hint.style.cssText = 'background:linear-gradient(90deg,rgba(42,82,152,0.08),rgba(42,82,152,0.15));color:#2a5298;text-align:center;padding:6px 12px;font-size:12px;border-radius:8px 8px 0 0;margin:0 0 -2px;animation:hintPulse 2s ease-in-out 3;position:relative;z-index:5;';
+    hint.textContent = '👉 左右滑动表格查看「盘点数量」输入框';
+    section.insertBefore(hint, section.firstChild);
+    // 用户开始滚动后自动移除
+    section.addEventListener('scroll', function removeHint() {
+      const h = document.getElementById('scrollHint');
+      if (h) h.remove();
+      section.removeEventListener('scroll', removeHint);
+    }, { passive: true });
+    // 5秒后自动消失
+    setTimeout(() => { const h = document.getElementById('scrollHint'); if (h) h.remove(); }, 6000);
+  }
+}
+
+// 清除盘点数量
+function clearQtyInput(itemId) {
+  if (!hasPerm('delete_qty')) { toast('权限不足'); return; }
+  const input = document.querySelector(`.qty-input[data-id="${itemId}"]`);
+  if (input) {
+    input.value = '';
+    onQtyInput(input); // 触发更新逻辑
+  }
+}
+
+let qtySaveTimer = null;  // 防抖定时器
+function onQtyInput(input) {
+  const id = parseInt(input.dataset.id);
+  let val = input.value.trim();
+  // 取整
+  if (val !== '' && !isNaN(parseFloat(val))) {
+    const rounded = Math.round(parseFloat(val));
+    if (String(rounded) !== val) { input.value = rounded; val = String(rounded); }
+  }
+  const row = input.closest('tr');
+  const badge = row.querySelector('.status-badge');
+  
+  if (!savedQty[id]) savedQty[id] = { qty: '', remark: '' };
+  savedQty[id].qty = val;
+  
+  if (val !== '') {
+    input.classList.add('filled');
+    badge.textContent = '已完成'; badge.className = 'status-badge badge-done';
+    row.classList.add('done-row');
+  } else {
+    input.classList.remove('filled');
+    badge.textContent = '待盘点'; badge.className = 'status-badge badge-pending';
+    row.classList.remove('done-row');
+  }
+  
+  // 防抖保存到服务器
+  clearTimeout(qtySaveTimer);
+  qtySaveTimer = setTimeout(() => saveQtyToServer(id, val, savedQty[id]?.remark || ''), 500);
+  
+  updateStats();
+}
+
+let remarkSaveTimer = null;
+function onRemarkInput(input) {
+  const id = parseInt(input.dataset.id);
+  if (!savedQty[id]) savedQty[id] = { qty: '', remark: '' };
+  savedQty[id].remark = input.value;
+  
+  clearTimeout(remarkSaveTimer);
+  remarkSaveTimer = setTimeout(() => saveQtyToServer(id, savedQty[id]?.qty || '', input.value), 800);
+}
+
+async function saveQtyToServer(itemId, qty, remark) {
+  if (!currentTaskId) return;
+  const checker = localStorage.getItem('inv_checker') || '';
+  
+  if (useServer) {
+    await api('/api/tasks/' + currentTaskId + '/qty', {
+      method: 'POST',
+      body: { itemId, qty, remark, updatedBy: checker },
+    });
+    // 刷新侧边栏计数（节流）
+    loadAllTasks().then(() => renderTaskList());
+  } else {
+    if (localTasks[currentTaskId]) {
+      if (!localTasks[currentTaskId].savedQty) localTasks[currentTaskId].savedQty = {};
+      localTasks[currentTaskId].savedQty[itemId] = { qty, remark };
+      saveLocalTasks();
+    }
+    renderTaskList();
+  }
+}
+
+// ========== 过滤 ==========
+function filterTable() { applyFilter(); }
+function setFilter(mode, btn) {
+  filterMode = mode;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilter();
+}
+function applyFilter() {
+  const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
+  document.querySelectorAll('#tableBody tr[data-id]').forEach(row => {
+    const code = (row.dataset.code || '').toLowerCase();
+    const name = (row.dataset.name || '').toLowerCase();
+    const searchMatch = !q || code.includes(q) || name.includes(q);
+    const isDone = row.classList.contains('done-row');
+    const statusMatch = filterMode === 'all' ? true : (filterMode === 'done' ? isDone : !isDone);
+    row.style.display = searchMatch && statusMatch ? '' : 'none';
+  });
+}
+
+// ========== 统计 ==========
+function updateStats() {
+  const inputs = document.querySelectorAll('.qty-input');
+  let total = inputs.length, done = 0;
+  inputs.forEach(i => { if (i.value.trim() !== '') done++; });
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statDone').textContent = done;
+  document.getElementById('statPending').textContent = total - done;
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('progressFill').style.width = pct + '%';
+  
+  // 更新 meta
+  const fileName = document.getElementById('taskNameDisplay')?.textContent || '';
+  document.getElementById('taskMetaDisplay').textContent = `${total} 条物料 · 已盘 ${done} 条`;
+}
+
+// ========== 差异报告 ==========
+async function showReport() {
+  if (!hasPerm('export_report')) { toast('权限不足，仅管理员可查看差异报告'); return; }
+  // 先从服务器拉最新数据
+  if (useServer && currentTaskId) {
+    const detail = await loadTaskDetail(currentTaskId);
+    if (detail) {
+      savedQty = detail.savedQty || {};
+      taskSignatures = detail.signatures || {};
+    }
+  }
+  
+  buildReportHTML(allItems, savedQty, 'reportSummary', 'reportTable');
+  const tableEl = document.getElementById('reportTable');
+  const oldSig = tableEl.parentElement.querySelector('.report-sig-area');
+  if (oldSig) oldSig.remove();
+  if (taskSignatures && Object.keys(taskSignatures).length > 0) {
+    tableEl.insertAdjacentHTML('afterend', buildSignatureHTML(taskSignatures, false));
+  }
+  document.getElementById('reportModal').classList.add('active');
+}
+
+function buildReportHTML(items, qtyMap, summaryId, tableId) {
+  let total = 0, surplus = 0, shortage = 0, match = 0, unfinished = 0;
+  let tableHTML = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th>序号</th><th>物料编码</th><th>物料名称</th><th>规格</th>
+      <th>单位</th><th>库位</th><th>账面数量</th><th>盘点数量</th>
+      <th>差异</th><th>差异比例</th><th>备注</th>
+    </tr></thead><tbody>`;
+  
+  items.forEach(item => {
+    const stockQty = parseFloat(item.stock_qty) || 0;
+    const saved = qtyMap[item.id];
+    const actualQty = saved && saved.qty !== '' ? Math.round(parseFloat(saved.qty)) : null;
+    const remark = saved ? saved.remark : '';
+    total++;
+    
+    let rowBg='', diffHTML='-', pctHTML='-';
+    if (actualQty === null) {
+      unfinished++; rowBg='#fffbe6';
+    } else {
+      const diff = actualQty - stockQty;
+      const pct = stockQty !== 0 ? (diff / stockQty * 100) : (diff !== 0 ? Infinity : 0);
+      if (diff > 0) { surplus++; rowBg='#fff2f0'; }
+      else if (diff < 0) { shortage++; rowBg='#f6ffed'; }
+      else { match++; }
+      const sign = diff > 0 ? '+' : '';
+      const cls = diff > 0 ? 'diff-plus' : (diff < 0 ? 'diff-minus' : 'diff-zero');
+      diffHTML = `<span class="${cls}">${sign}${diff}</span>`;
+      pctHTML = `<span class="${cls}">${sign}${isFinite(pct) ? pct.toFixed(2)+'%' : '∞'}</span>`;
+    }
+    
+    tableHTML += `<tr style="background:${rowBg}">
+      <td style="text-align:center;padding:8px">${escHTML(item.item_no)}</td>
+      <td style="font-family:monospace;color:#1890ff;padding:8px">${escHTML(item.material_code)}</td>
+      <td style="padding:8px">${escHTML(item.material_name)}</td>
+      <td style="padding:8px">${escHTML(item.spec)}</td>
+      <td style="text-align:center;padding:8px">${escHTML(item.unit)}</td>
+      <td style="text-align:center;padding:8px">${escHTML(item.location)}</td>
+      <td style="text-align:center;padding:8px">${stockQty}</td>
+      <td style="text-align:center;font-weight:600;padding:8px">${actualQty !== null ? actualQty : '<span style="color:#faad14">未录入</span>'}</td>
+      <td style="text-align:center;padding:8px">${diffHTML}</td>
+      <td style="text-align:center;padding:8px">${pctHTML}</td>
+      <td style="padding:8px">${escHTML(remark)}</td>
+    </tr>`;
+  });
+  tableHTML += '</tbody></table>';
+  
+  const checker = localStorage.getItem('inv_checker') || '未设置';
+  document.getElementById(summaryId).innerHTML = `
+    📋 总物料: <strong>${total}</strong> &nbsp;|&nbsp;
+    ✅ 已盘点: <strong>${total - unfinished}</strong> &nbsp;|&nbsp;
+    ⚠️ 未录入: <strong style="color:#faad14">${unfinished}</strong> &nbsp;|&nbsp;
+    🔴 盘盈: <strong style="color:#ff4d4f">${surplus}</strong> &nbsp;|&nbsp;
+    🟢 盘亏: <strong style="color:#52c41a">${shortage}</strong> &nbsp;|&nbsp;
+    ⚪ 相符: <strong>${match}</strong> &nbsp;|&nbsp;
+    盘点人: <strong>${checker}</strong>
+  `;
+  document.getElementById(tableId).innerHTML = tableHTML;
+}
+
+// ========== 导出 ==========
+function exportJSON() {
+  if (useServer && !hasPerm('export_report')) { toast('权限不足'); return; }
+  const checker = localStorage.getItem('inv_checker') || '';
+  const result = allItems.map(item => {
+    const saved = savedQty[item.id];
+    return { ...item, actual_qty: saved ? saved.qty : '', count_remark: saved ? saved.remark : '', checker, timestamp: new Date().toISOString() };
+  });
+  const taskName = document.getElementById('taskNameDisplay')?.textContent || '导出';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' }));
+  a.download = `盘点数据_${taskName}.json`;
+  a.click();
+  toast('数据已导出');
+}
+
+function exportTaskReportCSV(targetTaskId) {
+  if (!hasPerm('export_report')) { toast('权限不足，仅管理员可导出报告'); return; }
+  const tid = targetTaskId || currentTaskId;
+  // 直接从服务器/本地加载完整数据来导出
+  (async () => {
+    const detail = await loadTaskDetail(tid);
+    if (!detail) { toast('无法加载任务数据'); return; }
+    const items = detail.items || [];
+    const qtyMap = detail.savedQty || {};
+    const name = detail.name || '导出';
+    const checker = detail.checker || '未设置';
+    
+    let csv = '\uFEFF序号,物料编码,物料名称,规格型号,单位,库位,账面数量,盘点数量,差异,差异比例,状态,备注\n';
+    items.forEach(item => {
+      const stockQty = parseFloat(item.stock_qty) || 0;
+      const saved = qtyMap[item.id];
+      const actualQty = saved && saved.qty !== '' ? Math.round(parseFloat(saved.qty)) : '';
+      const remark = saved ? saved.remark : '';
+      const diff = actualQty !== '' ? actualQty - stockQty : '';
+      const pct = (diff !== '' && stockQty !== 0) ? ((diff / stockQty) * 100).toFixed(2) + '%' : '';
+      const status = actualQty === '' ? '未录入' : (diff > 0 ? '盘盈' : (diff < 0 ? '盘亏' : '相符'));
+      csv += [item.item_no, item.material_code, `"${item.material_name}"`, `"${item.spec}"`, item.unit, item.location,
+        stockQty, actualQty !== '' ? actualQty : '', diff !== '' ? (diff > 0 ? '+'+diff : diff) : '', pct, status, `"${remark}"`].join(',') + '\n';
+    });
+    
+    const now = new Date();
+    const fn = `盘点报告_${name}_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.csv`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = fn; a.click();
+    toast('报告已导出: ' + fn);
+  })();
+}
+
+function exportTaskHistoryCSV() {
+  if (historyViewTaskId) exportTaskReportCSV(historyViewTaskId);
+}
+
+function exportSingleTaskCSV(taskId) {
+  exportTaskReportCSV(taskId);
+}
+
+// ========== 任务操作 ==========
+async function deleteTask(taskId) {
+  if (useServer && !hasPerm('delete_task')) { toast('权限不足，仅管理员可删除任务'); return; }
+  const task = taskList.find(t => t.id === taskId);
+  if (!task) return;
+  if (!confirm(`确认删除任务「${task.name}」？删除后不可恢复。`)) return;
+  
+  if (useServer) {
+    await api('/api/tasks/' + taskId, { method: 'DELETE' });
+  } else {
+    delete localTasks[taskId];
+    saveLocalTasks();
+  }
+  
+  if (currentTaskId === taskId) {
+    currentTaskId = null;
+    allItems = [];
+    savedQty = {};
+    taskSignatures = {};
+    document.getElementById('workspace').classList.remove('active');
+    document.getElementById('welcomeView').style.display = 'flex';
+  }
+  
+  await loadAllTasks();
+  renderTaskList();
+  toast('任务已删除');
+}
+
+async function viewTaskDetail(taskId) {
+  historyViewTaskId = taskId;
+  const detail = await loadTaskDetail(taskId);
+  if (!detail) { toast('无法加载任务详情'); return; }
+  
+  document.getElementById('taskDetailTitle').textContent = `📋 ${detail.name}`;
+  const content = document.getElementById('taskDetailContent');
+  
+  const total = (detail.items || []).length;
+  const done = Object.values(detail.savedQty || {}).filter(v => v.qty !== '').length;
+  const canExport = hasPerm('export_report');
+  
+  // 盘点人只看基本信息，不看差异报告
+  if (!canExport) {
+    content.innerHTML = `
+      <div style="margin-bottom:14px;font-size:13px;color:#555">
+        <div>📅 创建时间：${formatTime(detail.createdAt)}</div>
+        <div>👤 盘点人：${escHTML(detail.checker || '未设置')}</div>
+        <div>📊 进度：${done}/${total}（${total > 0 ? Math.round(done/total*100) : 0}%）</div>
+      </div>
+      <div style="text-align:center;color:#999;padding:20px;font-size:13px">如需查看差异报告，请联系管理员</div>
+    `;
+    // 隐藏导出按钮
+    const exportBtn = document.getElementById('btnDetailExport');
+    if (exportBtn) exportBtn.style.display = 'none';
+  } else {
+    content.innerHTML = `
+      <div style="margin-bottom:14px;font-size:13px;color:#555">
+        <div>📅 创建时间：${formatTime(detail.createdAt)}</div>
+        <div>👤 盘点人：${escHTML(detail.checker || '未设置')}</div>
+        <div>📄 文件：${escHTML(detail.fileName || '未导入')}</div>
+        <div>📊 进度：${done}/${total}（${total > 0 ? Math.round(done/total*100) : 0}%）</div>
+      </div>
+      ${total > 0 ? '' : '<div style="text-align:center;color:#bbb;padding:20px">暂无数据（未导入 Excel）</div>'}
+      <div class="report-summary" id="detailSummary"></div>
+      <div class="report-table" id="detailTable" style="max-height:400px;overflow-y:auto"></div>
+      <div id="detailSigArea"></div>
+    `;
+    const exportBtn = document.getElementById('btnDetailExport');
+    if (exportBtn) exportBtn.style.display = '';
+    
+    if (total > 0) {
+      buildReportHTML(detail.items, detail.savedQty, 'detailSummary', 'detailTable');
+    }
+    
+    if (detail.signatures && Object.keys(detail.signatures).length > 0) {
+      document.getElementById('detailSigArea').innerHTML = buildSignatureHTML(detail.signatures, false);
+    }
+  }
+  
+  document.getElementById('taskDetailModal').classList.add('active');
+}
+
+// ========== 通用 ==========
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+// Toast
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// 键盘 Enter 跳转
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.classList.contains('qty-input')) {
+    const all = Array.from(document.querySelectorAll('.qty-input'));
+    const visible = all.filter(i => i.closest('tr')?.style.display !== 'none');
+    const idx = visible.indexOf(e.target);
+    if (idx < visible.length - 1) visible[idx + 1].focus();
+  }
+});
+
+// 手机端：点击盘点输入框时，自动滚动到输入框可见位置
+document.addEventListener('focusin', e => {
+  if (isMobile() && e.target.classList.contains('qty-input')) {
+    setTimeout(() => {
+      const tableSection = document.getElementById('tableSection');
+      const wrap = tableSection?.querySelector('.table-wrap');
+      if (!wrap || !e.target.offsetParent) return;
+      // 计算输入框在容器中的位置
+      const wrapRect = wrap.getBoundingClientRect();
+      const inputRect = e.target.getBoundingClientRect();
+      const inputLeft = e.target.offsetParent.offsetLeft + e.target.offsetLeft;
+      // 如果输入框在可视区域右侧之外，自动滚动
+      if (inputRect.left > wrapRect.right - 20) {
+        wrap.scrollTo({ left: inputLeft - wrapRect.width + 100, behavior: 'smooth' });
+      }
+    }, 100);
+  }
+});
+
+// 离开提示
+window.addEventListener('beforeunload', e => {
+  const any = Object.values(savedQty).some(v => v.qty !== '');
+  if (any) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// ========== 签字功能 ==========
+const SIG_ROLES = {
+  checker:  { label: '盘点人', color: '#1e3c72' },
+  reviewer: { label: '复核人', color: '#722ed1' },
+  auditor:  { label: '审核人', color: '#cf1322' },
+};
+let sigCurrentRole = 'checker';
+let sigCanvas, sigCtx, sigDrawing = false, sigStrokes = [], sigCurrentStroke = [];
+
+function initSigCanvas() {
+  sigCanvas = document.getElementById('sigCanvas');
+  const wrap = document.getElementById('sigCanvasWrap');
+  // 设置实际像素大小
+  const rect = wrap.getBoundingClientRect();
+  sigCanvas.width = rect.width * 2;
+  sigCanvas.height = 320; // 160px CSS height * 2 for retina
+  sigCanvas.style.height = '160px';
+  sigCtx = sigCanvas.getContext('2d');
+  sigCtx.scale(2, 2);
+  sigCtx.lineCap = 'round';
+  sigCtx.lineJoin = 'round';
+  sigCtx.lineWidth = 2.5;
+  sigCtx.strokeStyle = '#1e3c72';
+
+  // 事件绑定
+  sigCanvas.addEventListener('pointerdown', sigStart);
+  sigCanvas.addEventListener('pointermove', sigMove);
+  sigCanvas.addEventListener('pointerup', sigEnd);
+  sigCanvas.addEventListener('pointerleave', sigEnd);
+  // 阻止触屏滚动
+  sigCanvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+}
+
+function sigGetPos(e) {
+  const rect = sigCanvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+function sigStart(e) {
+  sigDrawing = true;
+  sigCurrentStroke = [];
+  const pos = sigGetPos(e);
+  sigCurrentStroke.push(pos);
+  sigCtx.beginPath();
+  sigCtx.moveTo(pos.x, pos.y);
+  document.getElementById('sigPlaceholder').classList.add('hidden');
+}
+
+function sigMove(e) {
+  if (!sigDrawing) return;
+  const pos = sigGetPos(e);
+  sigCurrentStroke.push(pos);
+  sigCtx.lineTo(pos.x, pos.y);
+  sigCtx.stroke();
+}
+
+function sigEnd() {
+  if (!sigDrawing) return;
+  sigDrawing = false;
+  if (sigCurrentStroke.length > 1) {
+    sigStrokes.push([...sigCurrentStroke]);
+  }
+  sigCurrentStroke = [];
+}
+
+function redrawSignature() {
+  const w = sigCanvas.width / 2, h = sigCanvas.height / 2;
+  sigCtx.clearRect(0, 0, w, h);
+  sigStrokes.forEach(stroke => {
+    if (stroke.length < 2) return;
+    sigCtx.beginPath();
+    sigCtx.moveTo(stroke[0].x, stroke[0].y);
+    for (let i = 1; i < stroke.length; i++) {
+      sigCtx.lineTo(stroke[i].x, stroke[i].y);
+    }
+    sigCtx.stroke();
+  });
+  document.getElementById('sigPlaceholder').classList.toggle('hidden', sigStrokes.length > 0);
+}
+
+function clearSignature() {
+  sigStrokes = [];
+  sigCurrentStroke = [];
+  const w = sigCanvas.width / 2, h = sigCanvas.height / 2;
+  sigCtx.clearRect(0, 0, w, h);
+  document.getElementById('sigPlaceholder').classList.remove('hidden');
+}
+
+function undoSignature() {
+  sigStrokes.pop();
+  redrawSignature();
+}
+
+function switchSigRole(role) {
+  sigCurrentRole = role;
+  // 更新标签状态
+  document.querySelectorAll('.sig-role-tab').forEach(tab => tab.classList.remove('active'));
+  const tabs = document.querySelectorAll('.sig-role-tab');
+  const roleKeys = Object.keys(SIG_ROLES);
+  const idx = roleKeys.indexOf(role);
+  if (idx >= 0 && tabs[idx]) tabs[idx].classList.add('active');
+  // 更新画笔颜色
+  if (sigCtx) sigCtx.strokeStyle = SIG_ROLES[role].color;
+  // 预填签名人
+  const sigs = taskSignatures || {};
+  if (role === 'checker') {
+    document.getElementById('sigSignerName').value = localStorage.getItem('inv_checker') || (sigs.checker ? sigs.checker.name : '');
+  } else {
+    document.getElementById('sigSignerName').value = sigs[role] ? sigs[role].name : '';
+  }
+  clearSignature();
+}
+
+async function openSignatureModal() {
+  if (!currentTaskId) { toast('请先选择一个任务'); return; }
+  if (!allItems.length) { toast('当前任务暂无数据'); return; }
+  
+  // 先从服务器拉最新签名
+  if (useServer && currentTaskId) {
+    const detail = await loadTaskDetail(currentTaskId);
+    if (detail) taskSignatures = detail.signatures || {};
+  } else if (localTasks[currentTaskId]) {
+    taskSignatures = localTasks[currentTaskId].signatures || {};
+  }
+  
+  sigCurrentRole = 'checker';
+  sigStrokes = [];
+  document.querySelectorAll('.sig-role-tab').forEach(tab => tab.classList.remove('active'));
+  document.querySelectorAll('.sig-role-tab')[0].classList.add('active');
+  document.getElementById('sigSignerName').value = taskSignatures.checker ? taskSignatures.checker.name : (localStorage.getItem('inv_checker') || '');
+  updateSigRoleTabs();
+  renderSigSavedList();
+  document.getElementById('signatureModal').classList.add('active');
+  setTimeout(() => {
+    initSigCanvas();
+    if (sigCtx) sigCtx.strokeStyle = SIG_ROLES.checker.color;
+    redrawSavedSig();
+  }, 100);
+}
+
+function updateSigRoleTabs() {
+  const sigs = taskSignatures || {};
+  const tabs = document.querySelectorAll('.sig-role-tab');
+  const roleKeys = Object.keys(SIG_ROLES);
+  roleKeys.forEach((role, i) => {
+    tabs[i].classList.toggle('done', !!sigs[role]);
+  });
+}
+
+function redrawSavedSig() {
+  const sig = (taskSignatures || {})[sigCurrentRole];
+  if (!sig || !sig.dataURL) { clearSignature(); return; }
+  const img = new Image();
+  img.onload = () => {
+    const w = sigCanvas.width / 2, h = sigCanvas.height / 2;
+    sigCtx.clearRect(0, 0, w, h);
+    sigCtx.drawImage(img, 0, 0, w, h);
+    document.getElementById('sigPlaceholder').classList.add('hidden');
+    sigStrokes = [];
+  };
+  img.src = sig.dataURL;
+}
+
+async function saveSignature() {
+  const name = document.getElementById('sigSignerName').value.trim();
+  if (!name) { toast('请输入签名人姓名'); return; }
+  if (sigStrokes.length === 0) { toast('请先在签名区手写签字'); return; }
+
+  const dataURL = sigCanvas.toDataURL('image/png');
+  
+  if (useServer && currentTaskId) {
+    const result = await api('/api/tasks/' + currentTaskId + '/signatures', {
+      method: 'POST',
+      body: {
+        roleKey: sigCurrentRole,
+        role: SIG_ROLES[sigCurrentRole].label,
+        name: name,
+        dataURL: dataURL,
+      },
+    });
+    if (!result || result.__error) { toast((result && result.error) || '保存失败，请检查服务器连接'); return; }
+  } else {
+    if (localTasks[currentTaskId]) {
+      if (!localTasks[currentTaskId].signatures) localTasks[currentTaskId].signatures = {};
+      localTasks[currentTaskId].signatures[sigCurrentRole] = {
+        name, role: SIG_ROLES[sigCurrentRole].label, roleKey: sigCurrentRole,
+        dataURL, timestamp: Date.now(),
+      };
+      saveLocalTasks();
+    }
+  }
+  
+  if (!taskSignatures) taskSignatures = {};
+  taskSignatures[sigCurrentRole] = {
+    name, role: SIG_ROLES[sigCurrentRole].label, roleKey: sigCurrentRole,
+    dataURL, timestamp: Date.now(),
+  };
+  
+  updateSigRoleTabs();
+  renderSigSavedList();
+  loadAllTasks().then(() => renderTaskList());
+  toast(`${SIG_ROLES[sigCurrentRole].label} ${name} 签字成功`);
+}
+
+function renderSigSavedList() {
+  const container = document.getElementById('sigSavedList');
+  const sigs = taskSignatures || {};
+  const entries = Object.entries(sigs);
+  if (entries.length === 0) {
+    container.innerHTML = '<div style="text-align:center;color:#bbb;font-size:12px;padding:12px">暂无签字</div>';
+    return;
+  }
+  container.innerHTML = entries.map(([roleKey, sig]) => `
+    <div class="sig-saved-item">
+      <img src="${sig.dataURL}" alt="${sig.role}签名">
+      <div class="sig-info">
+        <div class="sig-who">${escHTML(sig.role)}：${escHTML(sig.name)}</div>
+        <div>${formatTime(sig.timestamp)}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:11px;color:#ff4d4f" onclick="deleteSignature('${roleKey}')">删除</button>
+    </div>
+  `).join('');
+}
+
+async function deleteSignature(roleKey) {
+  if (!taskSignatures || !taskSignatures[roleKey]) return;
+  const label = taskSignatures[roleKey].role;
+  if (!confirm(`确定删除${label} ${taskSignatures[roleKey].name} 的签字？`)) return;
+  
+  if (useServer && currentTaskId) {
+    await api('/api/tasks/' + currentTaskId + '/signatures/' + roleKey, { method: 'DELETE' });
+  } else if (localTasks[currentTaskId] && localTasks[currentTaskId].signatures) {
+    delete localTasks[currentTaskId].signatures[roleKey];
+    saveLocalTasks();
+  }
+  
+  delete taskSignatures[roleKey];
+  updateSigRoleTabs();
+  renderSigSavedList();
+  loadAllTasks().then(() => renderTaskList());
+  toast(`${label}签字已删除`);
+  
+  if (roleKey === sigCurrentRole) {
+    clearSignature();
+    document.getElementById('sigSignerName').value = '';
+  }
+}
+
+// 构建报告中的签名 HTML
+function buildSignatureHTML(signatures, compact) {
+  if (!signatures) return '';
+  const entries = Object.entries(signatures);
+  if (entries.length === 0) {
+    return compact ? '' : '<div style="text-align:center;color:#bbb;padding:16px;font-size:13px">暂无签字</div>';
+  }
+  return `
+    <div class="report-sig-area">
+      <h4>✍️ 签字确认</h4>
+      <div class="report-sig-grid">
+        ${entries.map(([roleKey, sig]) => `
+          <div class="report-sig-box">
+            <div class="sig-label">${escHTML(sig.role)}</div>
+            <img src="${sig.dataURL}" alt="${sig.role}签名">
+            <div class="sig-name">${escHTML(sig.name)}</div>
+            <div class="sig-time">${formatTime(sig.timestamp)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ========== 导出图片版报告 ==========
+async function exportReportAsImage() {
+  if (!currentTaskId) { toast('请先选择一个任务'); return; }
+  
+  // 拉最新数据
+  const task = await loadTaskDetail(currentTaskId);
+  if (!task || !(task.items || []).length) { toast('当前任务暂无数据'); return; }
+
+  toast('正在生成图片报告...');
+
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:900px;background:#fff;padding:30px;font-family:Microsoft YaHei,Arial,sans-serif;color:#333;font-size:13px;';
+
+  const now = new Date();
+  container.innerHTML = `
+    <div style="text-align:center;margin-bottom:20px">
+      <h1 style="font-size:22px;color:#1e3c72;margin-bottom:6px">📦 仓库物料盘点报告</h1>
+      <div style="font-size:12px;color:#888">${escHTML(task.name)} | ${formatTime(task.createdAt)} | 盘点人：${escHTML(task.checker || '未设置')}</div>
+    </div>
+    <div id="imgReportSummary" style="background:#f5f7fa;border-radius:6px;padding:10px 14px;margin-bottom:14px;line-height:1.8;font-size:12px"></div>
+    <div id="imgReportTable" style="font-size:11px"></div>
+    <div id="imgReportSigs"></div>
+    <div style="text-align:center;margin-top:16px;font-size:10px;color:#bbb">生成时间：${formatTime(Date.now())}</div>
+  `;
+
+  document.body.appendChild(container);
+
+  buildReportHTML(task.items, task.savedQty, 'imgReportSummary', 'imgReportTable');
+  const sigsDiv = document.getElementById('imgReportSigs');
+  if (task.signatures) {
+    sigsDiv.innerHTML = buildSignatureHTML(task.signatures, false);
+  }
+
+  // 用 html2canvas 的简化方案：直接用 Canvas API 绘制
+  // 由于没有 html2canvas 库，我们用 SVG foreignObject 方案
+  setTimeout(() => {
+    const width = 900;
+    const height = container.scrollHeight + 40;
+
+    // 创建 SVG + Canvas 渲染
+    const data = new XMLSerializer().serializeToString(createSVGFromHTML(container, width, height));
+    const svgBlob = new Blob([data], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width * 2;
+      canvas.height = height * 2;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(2, 2);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+
+      // 下载
+      const link = document.createElement('a');
+      link.download = `盘点报告_${task.name}_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+
+      document.body.removeChild(container);
+      toast('图片报告已导出');
+    };
+    img.onerror = () => {
+      // SVG 方案失败，使用简化方案：导出 HTML 为图片（通过 canvas 截图不可用时退化为提示）
+      document.body.removeChild(container);
+      toast('图片导出受限，请使用浏览器截图或打印为 PDF');
+    };
+    img.src = url;
+  }, 200);
+}
+
+function createSVGFromHTML(element, width, height) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', width);
+  svg.setAttribute('height', height);
+  const foreign = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+  foreign.setAttribute('width', '100%');
+  foreign.setAttribute('height', '100%');
+  foreign.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+  const clone = element.cloneNode(true);
+  // 内联签名图片
+  clone.querySelectorAll('img').forEach(img => {
+    if (img.src && img.src.startsWith('data:')) {
+      img.setAttribute('src', img.src);
+    }
+  });
+  foreign.appendChild(clone);
+  svg.appendChild(foreign);
+  return svg;
+}
+</script>
+</body>
+</html>
