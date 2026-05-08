@@ -1,0 +1,2756 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>仓库物料盘点系统</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary: #1e3c72;
+            --primary-light: #2a5298;
+            --primary-dark: #152951;
+            --accent: #e94560;
+            --success: #28a745;
+            --warning: #ffc107;
+            --danger: #dc3545;
+            --bg: #f5f7fa;
+            --white: #ffffff;
+            --gray-100: #f8f9fa;
+            --gray-200: #e9ecef;
+            --gray-300: #dee2e6;
+            --gray-400: #ced4da;
+            --gray-500: #adb5bd;
+            --gray-600: #6c757d;
+            --gray-700: #495057;
+            --gray-800: #333333;
+            --shadow: 0 2px 8px rgba(0,0,0,0.1);
+            --shadow-lg: 0 4px 16px rgba(0,0,0,0.15);
+            --radius: 8px;
+            --sidebar-width: 260px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg);
+            color: var(--gray-800);
+            min-height: 100vh;
+        }
+
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            padding: 20px;
+        }
+
+        .login-box {
+            background: var(--white);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-box h1 {
+            color: var(--primary);
+            text-align: center;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+
+        .login-box .subtitle {
+            color: var(--gray-600);
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--gray-700);
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            font-size: 15px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: var(--primary-light);
+            box-shadow: 0 0 0 3px rgba(42, 82, 152, 0.15);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: var(--white);
+        }
+
+        .btn-primary:hover { background: var(--primary-light); }
+
+        .btn-secondary {
+            background: var(--gray-200);
+            color: var(--gray-700);
+        }
+
+        .btn-secondary:hover { background: var(--gray-300); }
+
+        .btn-danger {
+            background: var(--danger);
+            color: var(--white);
+        }
+
+        .btn-danger:hover { background: #c82333; }
+
+        .btn-success {
+            background: var(--success);
+            color: var(--white);
+        }
+
+        .btn-success:hover { background: #218838; }
+
+        .btn-block { width: 100%; }
+
+        .btn-sm { padding: 6px 12px; font-size: 13px; }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-group .btn { flex: 1; }
+
+        .login-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--gray-200);
+        }
+
+        .login-tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            color: var(--gray-600);
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+
+        .login-tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .error-msg {
+            color: var(--danger);
+            font-size: 13px;
+            margin-top: 8px;
+            display: none;
+        }
+
+        .app-container {
+            display: none;
+            min-height: 100vh;
+        }
+
+        .app-container.active { display: flex; }
+
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--primary);
+            color: var(--white);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .sidebar-header h2 {
+            font-size: 18px;
+            margin-bottom: 4px;
+        }
+
+        .sidebar-header .user-info {
+            font-size: 13px;
+            opacity: 0.8;
+        }
+
+        .sidebar-nav {
+            padding: 15px 0;
+        }
+
+        .nav-item {
+            padding: 12px 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: background 0.2s;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-item:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .nav-item.active {
+            background: rgba(255,255,255,0.15);
+            border-left-color: var(--white);
+        }
+
+        .nav-item svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .sidebar-divider {
+            height: 1px;
+            background: rgba(255,255,255,0.1);
+            margin: 10px 20px;
+        }
+
+        .sidebar-footer {
+            margin-top: auto;
+            padding: 15px 20px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .sidebar-footer .btn {
+            width: 100%;
+            background: rgba(255,255,255,0.1);
+            color: var(--white);
+        }
+
+        .sidebar-footer .btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            padding: 25px;
+            min-height: 100vh;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .page-title {
+            font-size: 24px;
+            color: var(--gray-800);
+        }
+
+        .page-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .card {
+            background: var(--white);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+        }
+
+        .card-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-header h3 {
+            font-size: 16px;
+            color: var(--gray-800);
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .task-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .task-item {
+            padding: 12px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--gray-100);
+            transition: background 0.2s;
+        }
+
+        .task-item:hover { background: var(--gray-100); }
+
+        .task-item.active {
+            background: rgba(30, 60, 114, 0.1);
+            border-left: 3px solid var(--primary);
+        }
+
+        .task-item .task-name {
+            font-weight: 500;
+            color: var(--gray-800);
+        }
+
+        .task-item .task-meta {
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        .task-item .delete-task {
+            color: var(--danger);
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .task-item:hover .delete-task { opacity: 1; }
+
+        .table-container {
+            overflow-x: auto;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        th {
+            background: var(--primary);
+            color: var(--white);
+            padding: 12px 10px;
+            text-align: left;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        tbody tr:hover { background: var(--gray-100); }
+
+        .count-input {
+            width: 100px;
+            padding: 8px;
+            border: 1px solid var(--gray-300);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .count-input:focus {
+            outline: none;
+            border-color: var(--primary-light);
+        }
+
+        .count-input.entered {
+            background: #e8f5e9;
+            border-color: var(--success);
+        }
+
+        .status-pending {
+            color: var(--gray-500);
+            background: var(--gray-200);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+
+        .status-done {
+            color: var(--success);
+            background: #e8f5e9;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+
+        .diff-profit {
+            background: #ffebee !important;
+            color: var(--danger);
+        }
+
+        .diff-loss {
+            background: #e8f5e9 !important;
+            color: var(--success);
+        }
+
+        .diff-match {
+            background: var(--white) !important;
+        }
+
+        .diff-empty {
+            background: #fff8e1 !important;
+        }
+
+        .progress-container {
+            margin-bottom: 20px;
+        }
+
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: var(--gray-600);
+        }
+
+        .progress-bar {
+            height: 10px;
+            background: var(--gray-200);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%);
+            border-radius: 5px;
+            transition: width 0.3s;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 200px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 10px 15px 10px 40px;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            font-size: 14px;
+        }
+
+        .search-box svg {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 18px;
+            height: 18px;
+            color: var(--gray-500);
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 5px;
+        }
+
+        .filter-tab {
+            padding: 8px 16px;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            background: var(--white);
+        }
+
+        .filter-tab:hover { border-color: var(--primary-light); }
+
+        .filter-tab.active {
+            background: var(--primary);
+            color: var(--white);
+            border-color: var(--primary);
+        }
+
+        .signature-section {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+
+        .signature-box {
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .signature-box h4 {
+            margin-bottom: 10px;
+            color: var(--gray-700);
+        }
+
+        .signature-canvas {
+            border: 2px dashed var(--gray-300);
+            border-radius: var(--radius);
+            background: var(--gray-100);
+            cursor: crosshair;
+            touch-action: none;
+        }
+
+        .signature-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-overlay.active { display: flex; }
+
+        .modal {
+            background: var(--white);
+            border-radius: var(--radius);
+            width: 100%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-size: 18px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--gray-500);
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid var(--gray-200);
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .user-table td {
+            vertical-align: middle;
+        }
+
+        .role-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+
+        .role-badge.admin {
+            background: #e3f2fd;
+            color: var(--primary);
+        }
+
+        .role-badge.checker {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--gray-500);
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: var(--gray-700);
+        }
+
+        .hidden-input {
+            display: none;
+        }
+
+        .mobile-menu-btn {
+            display: none;
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            z-index: 200;
+            background: var(--primary);
+            color: var(--white);
+            border: none;
+            padding: 10px;
+            border-radius: var(--radius);
+            cursor: pointer;
+        }
+
+        .report-legend {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: var(--gray-800);
+            color: var(--white);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            z-index: 2000;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast.success { background: var(--success); }
+        .toast.error { background: var(--danger); }
+
+        @media (max-width: 768px) {
+            .mobile-menu-btn { display: block; }
+
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s;
+            }
+
+            .sidebar.open { transform: translateX(0); }
+
+            .main-content {
+                margin-left: 0;
+                padding: 70px 15px 15px;
+            }
+
+            .page-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .toolbar {
+                flex-direction: column;
+            }
+
+            .search-box { width: 100%; }
+
+            .signature-section { flex-direction: column; }
+
+            .modal { max-width: 100%; }
+        }
+
+        @media print {
+            .sidebar, .mobile-menu-btn, .toolbar, .page-actions, .btn, .signature-actions {
+                display: none !important;
+            }
+
+            .main-content {
+                margin-left: 0;
+                padding: 0;
+            }
+
+            .card {
+                box-shadow: none;
+                border: 1px solid #ddd;
+            }
+
+            .diff-profit { background: #ffebee !important; -webkit-print-color-adjust: exact; }
+            .diff-loss { background: #e8f5e9 !important; -webkit-print-color-adjust: exact; }
+            .diff-empty { background: #fff8e1 !important; -webkit-print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container" id="loginContainer">
+        <div class="login-box">
+            <h1>仓库物料盘点系统</h1>
+            <p class="subtitle">多端同步版本 · Supabase 云端存储</p>
+
+            <div class="login-tabs">
+                <div class="login-tab active" data-tab="login">登录</div>
+                <div class="login-tab" data-tab="register">注册</div>
+            </div>
+
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" id="loginUsername" required placeholder="请输入用户名">
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" id="loginPassword" required placeholder="请输入密码">
+                </div>
+                <div class="error-msg" id="loginError">用户名或密码错误</div>
+                <button type="submit" class="btn btn-primary btn-block">登录</button>
+            </form>
+
+            <form id="registerForm" style="display: none;">
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" id="regUsername" required placeholder="请输入用户名">
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" id="regPassword" required placeholder="请输入密码">
+                </div>
+                <div class="form-group">
+                    <label>确认密码</label>
+                    <input type="password" id="regPassword2" required placeholder="请再次输入密码">
+                </div>
+                <div class="form-group">
+                    <label>角色</label>
+                    <select id="regRole">
+                        <option value="checker">盘点员</option>
+                        <option value="admin">管理员</option>
+                    </select>
+                </div>
+                <div class="error-msg" id="regError"></div>
+                <button type="submit" class="btn btn-primary btn-block">注册</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="app-container" id="appContainer">
+        <button class="mobile-menu-btn" id="mobileMenuBtn">
+            <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2">
+                <path d="M3 12h18M3 6h18M3 18h18"/>
+            </svg>
+        </button>
+
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>物料盘点系统</h2>
+                <div class="user-info">
+                    <span id="currentUserName">-</span>
+                    <span class="role-badge" id="currentUserRole">-</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-item active" data-page="tasks">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+                        <rect x="9" y="3" width="6" height="4" rx="1"/>
+                        <path d="M9 14l2 2 4-4"/>
+                    </svg>
+                    <span>盘点任务</span>
+                </div>
+                <div class="nav-item" data-page="inventory">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                    </svg>
+                    <span>物料盘点</span>
+                </div>
+                <div class="nav-item" data-page="report">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                        <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+                    </svg>
+                    <span>差异报告</span>
+                </div>
+                <div class="nav-item" data-page="settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                    </svg>
+                    <span>设置</span>
+                </div>
+                <div class="admin-only nav-item" data-page="users">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+                    </svg>
+                    <span>用户管理</span>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="btn" id="logoutBtn">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
+                    </svg>
+                    退出登录
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="page" id="page-tasks">
+                <div class="page-header">
+                    <h1 class="page-title">盘点任务</h1>
+                    <div class="page-actions admin-only">
+                        <button class="btn btn-primary" id="newTaskBtn">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12h14"/>
+                            </svg>
+                            新建任务
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>任务列表</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="task-list" id="taskList">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                                    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+                                    <rect x="9" y="3" width="6" height="4" rx="1"/>
+                                </svg>
+                                <h3>暂无任务</h3>
+                                <p>点击"新建任务"创建盘点任务</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="page" id="page-inventory" style="display: none;">
+                <div class="page-header">
+                    <h1 class="page-title">物料盘点 - <span id="currentTaskName">-</span></h1>
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="importBtn">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                            </svg>
+                            导入 Excel
+                        </button>
+                        <button class="btn btn-success" id="exportInventoryBtn">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                            </svg>
+                            导出 Excel
+                        </button>
+                    </div>
+                </div>
+
+                <div id="noTaskSelected" class="card">
+                    <div class="card-body">
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                                <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+                                <rect x="9" y="3" width="6" height="4" rx="1"/>
+                            </svg>
+                            <h3>请先选择任务</h3>
+                            <p>在左侧选择或创建盘点任务</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="inventoryContent" style="display: none;">
+                    <div class="progress-container">
+                        <div class="progress-info">
+                            <span>盘点进度</span>
+                            <span id="progressText">0 / 0</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div class="toolbar">
+                        <div class="search-box">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <path d="M21 21l-4.35-4.35"/>
+                            </svg>
+                            <input type="text" id="searchInput" placeholder="搜索物料编码或名称...">
+                        </div>
+                        <div class="filter-tabs">
+                            <button class="filter-tab active" data-filter="all">全部</button>
+                            <button class="filter-tab" data-filter="pending">待盘点</button>
+                            <button class="filter-tab" data-filter="done">已盘点</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="table-container">
+                            <table id="inventoryTable">
+                                <thead>
+                                    <tr>
+                                        <th>序号</th>
+                                        <th>物料编码</th>
+                                        <th>物料名称</th>
+                                        <th>规格型号</th>
+                                        <th>单位</th>
+                                        <th>库位</th>
+                                        <th class="admin-only">账面数量</th>
+                                        <th>盘点数量</th>
+                                        <th>状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="inventoryBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="page" id="page-report" style="display: none;">
+                <div class="page-header">
+                    <h1 class="page-title">差异报告</h1>
+                    <div class="page-actions">
+                        <button class="btn btn-success" id="exportReportBtn">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                            </svg>
+                            导出 Excel
+                        </button>
+                        <button class="btn btn-secondary" onclick="window.print()">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+                                <rect x="6" y="14" width="12" height="8"/>
+                            </svg>
+                            打印
+                        </button>
+                    </div>
+                </div>
+
+                <div id="reportNoTask" class="card">
+                    <div class="card-body">
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+                            </svg>
+                            <h3>请先选择任务</h3>
+                            <p>在左侧选择盘点任务查看差异报告</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="reportContent" style="display: none;">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>汇总统计</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="report-legend">
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: #ffebee;"></div>
+                                    <span>盘盈（实物 > 账面）</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: #e8f5e9;"></div>
+                                    <span>盘亏（实物 < 账面）</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: #fff8e1;"></div>
+                                    <span>未录入</span>
+                                </div>
+                            </div>
+                            <div id="reportSummary" style="display: flex; gap: 20px; flex-wrap: wrap;"></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>详细差异</h3>
+                        </div>
+                        <div class="table-container">
+                            <table id="reportTable">
+                                <thead>
+                                    <tr>
+                                        <th>序号</th>
+                                        <th>物料编码</th>
+                                        <th>物料名称</th>
+                                        <th>规格型号</th>
+                                        <th>账面数量</th>
+                                        <th>盘点数量</th>
+                                        <th>差异</th>
+                                        <th>状态</th>
+                                        <th>备注</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="reportBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>签名确认</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="signature-section" id="signatureSection"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="page" id="page-settings" style="display: none;">
+                <div class="page-header">
+                    <h1 class="page-title">设置</h1>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>修改密码</h3>
+                    </div>
+                    <div class="card-body">
+                        <form id="changePasswordForm">
+                            <div class="form-group">
+                                <label>当前密码</label>
+                                <input type="password" id="oldPassword" required>
+                            </div>
+                            <div class="form-group">
+                                <label>新密码</label>
+                                <input type="password" id="newPassword" required>
+                            </div>
+                            <div class="form-group">
+                                <label>确认新密码</label>
+                                <input type="password" id="newPassword2" required>
+                            </div>
+                            <div class="error-msg" id="pwdError"></div>
+                            <button type="submit" class="btn btn-primary">确认修改</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>数据管理</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="btn-group">
+                            <button class="btn btn-secondary" id="exportAllDataBtn">导出所有数据</button>
+                            <button class="btn btn-secondary" id="importDataBtn">导入数据</button>
+                            <button class="btn btn-danger" id="clearDataBtn">清空所有数据</button>
+                        </div>
+                        <input type="file" id="importDataFile" class="hidden-input" accept=".json">
+                        <div style="margin-top: 16px; padding: 12px; background: #f8f9fa; border-radius: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span id="dbStatusDot" style="width: 10px; height: 10px; border-radius: 50%; background: #dc3545; display: inline-block;"></span>
+                                <span id="dbStatusText">数据库未连接（使用本地存储）</span>
+                            </div>
+                            <div style="margin-top: 8px; font-size: 12px; color: #6c757d;">如需多人实时同步，请配置 Supabase 连接</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="page" id="page-users" style="display: none;">
+                <div class="page-header">
+                    <h1 class="page-title">用户管理</h1>
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="newUserBtn">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12h14"/>
+                            </svg>
+                            新建用户
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="table-container">
+                        <table class="user-table">
+                            <thead>
+                                <tr>
+                                    <th>用户名</th>
+                                    <th>角色</th>
+                                    <th>创建时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="userList"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="newTaskModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>新建任务</h3>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="newTaskForm">
+                    <div class="form-group">
+                        <label>任务名称</label>
+                        <input type="text" id="taskName" required placeholder="例如：2024年12月库存盘点">
+                    </div>
+                    <div class="form-group">
+                        <label>盘点人</label>
+                        <select id="taskChecker"></select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close>取消</button>
+                <button class="btn btn-primary" id="saveTaskBtn">创建</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="newUserModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>新建用户</h3>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="newUserForm">
+                    <div class="form-group">
+                        <label>用户名</label>
+                        <input type="text" id="newUserName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>密码</label>
+                        <input type="password" id="newUserPass" required>
+                    </div>
+                    <div class="form-group">
+                        <label>角色</label>
+                        <select id="newUserRole">
+                            <option value="checker">盘点员</option>
+                            <option value="admin">管理员</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close>取消</button>
+                <button class="btn btn-primary" id="saveUserBtn">创建</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="editUserModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>编辑用户</h3>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="editUserForm">
+                    <input type="hidden" id="editUserId">
+                    <div class="form-group">
+                        <label>用户名</label>
+                        <input type="text" id="editUserName" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label>角色</label>
+                        <select id="editUserRole">
+                            <option value="checker">盘点员</option>
+                            <option value="admin">管理员</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>新密码（留空不修改）</label>
+                        <input type="password" id="editUserPass" placeholder="不修改请留空">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close>取消</button>
+                <button class="btn btn-primary" id="updateUserBtn">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="signatureModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="signatureModalTitle">签名确认</h3>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <canvas id="signatureCanvas" class="signature-canvas" width="400" height="200"></canvas>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="clearSignatureBtn">清除</button>
+                <button class="btn btn-secondary" data-close>取消</button>
+                <button class="btn btn-primary" id="saveSignatureBtn">确认签名</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <input type="file" id="excelFileInput" class="hidden-input" accept=".xlsx,.xls,.csv">
+
+    <script>
+    (function() {
+        'use strict';
+
+        // ==================== Supabase Configuration ====================
+        // IMPORTANT: Replace with your Supabase project credentials
+        // 1. Go to https://supabase.com, create a free account and project
+        // 2. In project Settings > API, copy Project URL and anon public key
+        // 3. In SQL Editor, run the table creation SQL (see SKILL.md)
+        const SUPABASE_URL = 'https://ebjvbqlqebkpxwqgaavx.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVianZicWxxZWJrcHh3cWdhYXZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODY3OTUsImV4cCI6MjA5Mzc2Mjc5NX0.mZrfyw12EJFOZAB7R4ti4HffwsMvllUV21S681vWg1Q';
+
+        let sb = null;
+        let dbReady = false;
+        window._selfWrite = false;
+
+        function initSupabase() {
+            if (SUPABASE_URL && SUPABASE_KEY) {
+                try {
+                    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                    dbReady = true;
+                    var dot = document.getElementById('dbStatusDot');
+                    var txt = document.getElementById('dbStatusText');
+                    if (dot) dot.style.background = '#28a745';
+                    if (txt) txt.textContent = '数据库已连接（实时同步）';
+                } catch (err) {
+                    console.error('Supabase init error:', err);
+                }
+            }
+        }
+
+        window._markSelfWrite = function() {
+            window._selfWrite = true;
+            setTimeout(function() { window._selfWrite = false; }, 1500);
+        };
+
+        // ==================== Storage Keys ====================
+        var STORAGE = {
+            USERS: 'inv_users',
+            CURRENT_USER: 'inv_current_user',
+            TASKS: 'inv_tasks',
+            INVENTORY: 'inv_inventory_',
+            SIGNATURES: 'inv_signatures_'
+        };
+
+        // ==================== Simple Hash ====================
+        function hash(str) {
+            var h = 0;
+            for (var i = 0; i < str.length; i++) {
+                h = Math.imul(31, h) + str.charCodeAt(i) | 0;
+            }
+            return h.toString(36);
+        }
+
+        // ==================== Local Storage Helpers (fallback) ====================
+        function getDataLocal(key) {
+            try {
+                return JSON.parse(localStorage.getItem(key)) || null;
+            } catch (e) { return null; }
+        }
+
+        function setDataLocal(key, data) {
+            localStorage.setItem(key, JSON.stringify(data));
+        }
+
+        function delDataLocal(key) {
+            localStorage.removeItem(key);
+        }
+
+        // ==================== Supabase Async Data Layer ====================
+        async function getData(key) {
+            if (!dbReady) return getDataLocal(key);
+
+            try {
+                if (key === STORAGE.USERS) {
+                    var res = await sb.from('users').select('*').order('id');
+                    if (res.error) throw res.error;
+                    return res.data.map(function(u) {
+                        return {
+                            id: u.id,
+                            username: u.username,
+                            password: u.password,
+                            role: u.role,
+                            createdAt: new Date(u.created_at).getTime()
+                        };
+                    });
+                }
+                if (key === STORAGE.CURRENT_USER) {
+                    return getDataLocal(key);
+                }
+                if (key === STORAGE.TASKS) {
+                    var res2 = await sb.from('tasks').select('*').order('id');
+                    if (res2.error) throw res2.error;
+                    return res2.data.map(function(t) {
+                        return {
+                            id: t.id,
+                            name: t.name,
+                            checkerId: t.checker_id,
+                            checkerName: t.checker_name,
+                            createdAt: new Date(t.created_at).getTime()
+                        };
+                    });
+                }
+                if (key.indexOf(STORAGE.INVENTORY) === 0) {
+                    var taskId = parseInt(key.slice(STORAGE.INVENTORY.length));
+                    var res3 = await sb.from('inventory_items').select('*').eq('task_id', taskId);
+                    if (res3.error) throw res3.error;
+                    return res3.data.map(function(i) {
+                        return {
+                            id: i.id,
+                            code: i.code || '',
+                            name: i.name || '',
+                            spec: i.spec || '',
+                            unit: i.unit || '',
+                            location: i.location || '',
+                            stock: parseFloat(i.stock) || 0,
+                            remark: i.remark || '',
+                            count: i.count !== null ? parseFloat(i.count) : null,
+                            status: i.status || 'pending'
+                        };
+                    });
+                }
+                if (key.indexOf(STORAGE.SIGNATURES) === 0) {
+                    var sigTaskId = parseInt(key.slice(STORAGE.SIGNATURES.length));
+                    var res4 = await sb.from('signatures').select('*').eq('task_id', sigTaskId);
+                    if (res4.error) throw res4.error;
+                    if (res4.data.length === 0) return {};
+                    var row = res4.data[0];
+                    var result = {};
+                    if (row.checker) result.checker = row.checker;
+                    if (row.supervisor) result.supervisor = row.supervisor;
+                    if (row.manager) result.manager = row.manager;
+                    return result;
+                }
+            } catch (err) {
+                console.error('Supabase getData error:', err);
+                showToast('数据读取失败，已切换到本地模式', 'error');
+                dbReady = false;
+                return getDataLocal(key);
+            }
+            return null;
+        }
+
+        async function setData(key, data) {
+            if (!dbReady) {
+                setDataLocal(key, data);
+                return;
+            }
+
+            try {
+                if (key === STORAGE.USERS) {
+                    var rows = data.map(function(u) {
+                        return {
+                            id: u.id,
+                            username: u.username,
+                            password: u.password,
+                            role: u.role,
+                            created_at: new Date(u.createdAt).toISOString()
+                        };
+                    });
+                    var res = await sb.from('users').upsert(rows, { onConflict: 'id' });
+                    if (res.error) throw res.error;
+                    window._markSelfWrite();
+                }
+                if (key === STORAGE.CURRENT_USER) {
+                    setDataLocal(key, data);
+                }
+                if (key === STORAGE.TASKS) {
+                    var tRows = data.map(function(t) {
+                        return {
+                            id: t.id,
+                            name: t.name,
+                            checker_id: t.checkerId,
+                            checker_name: t.checkerName,
+                            created_at: new Date(t.createdAt).toISOString()
+                        };
+                    });
+                    var resT = await sb.from('tasks').upsert(tRows, { onConflict: 'id' });
+                    if (resT.error) throw resT.error;
+                    window._markSelfWrite();
+                }
+                if (key.indexOf(STORAGE.INVENTORY) === 0) {
+                    var invTaskId = parseInt(key.slice(STORAGE.INVENTORY.length));
+                    await sb.from('inventory_items').delete().eq('task_id', invTaskId);
+                    if (data && data.length > 0) {
+                        var invRows = data.map(function(i) {
+                            return {
+                                id: i.id,
+                                task_id: invTaskId,
+                                code: i.code || '',
+                                name: i.name || '',
+                                spec: i.spec || '',
+                                unit: i.unit || '',
+                                location: i.location || '',
+                                stock: i.stock || 0,
+                                remark: i.remark || '',
+                                count: i.count,
+                                status: i.status || 'pending'
+                            };
+                        });
+                        var resInv = await sb.from('inventory_items').insert(invRows);
+                        if (resInv.error) throw resInv.error;
+                    }
+                    window._markSelfWrite();
+                }
+                if (key.indexOf(STORAGE.SIGNATURES) === 0) {
+                    var sigId = parseInt(key.slice(STORAGE.SIGNATURES.length));
+                    var sigData = data || {};
+                    var sigRow = {
+                        task_id: sigId,
+                        checker: sigData.checker || null,
+                        supervisor: sigData.supervisor || null,
+                        manager: sigData.manager || null
+                    };
+                    var checkSig = await sb.from('signatures').select('id').eq('task_id', sigId);
+                    if (checkSig.data.length > 0) {
+                        var updSig = await sb.from('signatures').update(sigRow).eq('task_id', sigId);
+                        if (updSig.error) throw updSig.error;
+                    } else {
+                        var insSig = await sb.from('signatures').insert(sigRow);
+                        if (insSig.error) throw insSig.error;
+                    }
+                    window._markSelfWrite();
+                }
+            } catch (err) {
+                console.error('Supabase setData error:', err);
+                showToast('数据保存失败，已切换到本地模式', 'error');
+                dbReady = false;
+                setDataLocal(key, data);
+            }
+        }
+
+        async function delData(key) {
+            if (!dbReady) {
+                delDataLocal(key);
+                return;
+            }
+
+            try {
+                if (key.indexOf(STORAGE.INVENTORY) === 0) {
+                    var delTaskId = parseInt(key.slice(STORAGE.INVENTORY.length));
+                    await sb.from('inventory_items').delete().eq('task_id', delTaskId);
+                    window._markSelfWrite();
+                }
+                if (key.indexOf(STORAGE.SIGNATURES) === 0) {
+                    var delSigId = parseInt(key.slice(STORAGE.SIGNATURES.length));
+                    await sb.from('signatures').delete().eq('task_id', delSigId);
+                    window._markSelfWrite();
+                }
+            } catch (err) {
+                console.error('Supabase delData error:', err);
+            }
+            delDataLocal(key);
+        }
+
+        // ==================== User Management ====================
+        async function initUsers() {
+            if (!dbReady) {
+                var users = getDataLocal(STORAGE.USERS);
+                if (!users) {
+                    users = [
+                        { id: 1, username: 'admin', password: hash('Wl13579'), role: 'admin', createdAt: Date.now() },
+                        { id: 2, username: 'checker', password: hash('123456'), role: 'checker', createdAt: Date.now() }
+                    ];
+                    setDataLocal(STORAGE.USERS, users);
+                }
+                return users;
+            }
+
+            try {
+                var res = await sb.from('users').select('*').order('id');
+                if (res.error) throw res.error;
+
+                if (!res.data || res.data.length === 0) {
+                    var defaults = [
+                        { username: 'admin', password: hash('Wl13579'), role: 'admin' },
+                        { username: 'checker', password: hash('123456'), role: 'checker' }
+                    ];
+                    var inserted = await sb.from('users').insert(defaults).select();
+                    if (inserted.error) throw inserted.error;
+                    return inserted.data.map(function(u) {
+                        return {
+                            id: u.id,
+                            username: u.username,
+                            password: u.password,
+                            role: u.role,
+                            createdAt: new Date(u.created_at).getTime()
+                        };
+                    });
+                }
+                return res.data.map(function(u) {
+                    return {
+                        id: u.id,
+                        username: u.username,
+                        password: u.password,
+                        role: u.role,
+                        createdAt: new Date(u.created_at).getTime()
+                    };
+                });
+            } catch (err) {
+                console.error('Supabase initUsers error:', err);
+                showToast('数据库连接失败，使用本地存储', 'error');
+                dbReady = false;
+                return initUsers();
+            }
+        }
+
+        async function getUsers() {
+            return await getData(STORAGE.USERS) || [];
+        }
+
+        async function findUser(username) {
+            var users = await getUsers();
+            return users.find(function(u) { return u.username === username; });
+        }
+
+        async function addUser(username, password, role) {
+            var users = await getUsers();
+            if (users.find(function(u) { return u.username === username; })) {
+                return { success: false, message: '用户名已存在' };
+            }
+            users.push({
+                id: Date.now(),
+                username: username,
+                password: hash(password),
+                role: role,
+                createdAt: Date.now()
+            });
+            await setData(STORAGE.USERS, users);
+            return { success: true };
+        }
+
+        async function updateUser(id, role, newPassword) {
+            var users = await getUsers();
+            var idx = users.findIndex(function(u) { return u.id === id; });
+            if (idx === -1) return { success: false };
+            users[idx].role = role;
+            if (newPassword) users[idx].password = hash(newPassword);
+            await setData(STORAGE.USERS, users);
+            return { success: true };
+        }
+
+        async function deleteUser(id) {
+            var users = await getUsers();
+            var idx = users.findIndex(function(u) { return u.id === id; });
+            if (idx !== -1) {
+                users.splice(idx, 1);
+                await setData(STORAGE.USERS, users);
+            }
+        }
+
+        // ==================== Task Management ====================
+        async function getTasks() {
+            return await getData(STORAGE.TASKS) || [];
+        }
+
+        async function saveTasks(tasks) {
+            await setData(STORAGE.TASKS, tasks);
+        }
+
+        async function getTaskInventory(taskId) {
+            return await getData(STORAGE.INVENTORY + taskId) || [];
+        }
+
+        async function saveTaskInventory(taskId, data) {
+            await setData(STORAGE.INVENTORY + taskId, data);
+        }
+
+        async function getSignatures(taskId) {
+            return await getData(STORAGE.SIGNATURES + taskId) || {};
+        }
+
+        async function saveSignatures(taskId, sigs) {
+            await setData(STORAGE.SIGNATURES + taskId, sigs);
+        }
+
+        // ==================== Column Mapping ====================
+        var COLUMN_MAP = {
+            '物料编码': ['物料编码', '物料号', '料号', 'SKU', 'code', '编码', '商品编码'],
+            '物料名称': ['物料名称', '品名', '名称', '描述', 'name', '品名/名称'],
+            '规格型号': ['规格型号', '规格', '型号', 'spec', '规格/型号'],
+            '单位': ['单位', '计量单位', 'unit', 'unit'],
+            '库位': ['库位', '储位', '仓位', 'location', '存放位置'],
+            '库存数量': ['库存数量', '账面数量', '系统数量', '库存', 'qty', '账面库存'],
+            '备注': ['备注', '说明', 'remark', 'memo']
+        };
+
+        function normalizeHeader(header) {
+            if (!header) return '';
+            return String(header).trim().replace(/[\s\._\-\/]/g, '').toLowerCase();
+        }
+
+        function matchColumn(header) {
+            var norm = normalizeHeader(header);
+            var keys = Object.keys(COLUMN_MAP);
+            for (var i = 0; i < keys.length; i++) {
+                var aliases = COLUMN_MAP[keys[i]];
+                for (var j = 0; j < aliases.length; j++) {
+                    if (normalizeHeader(aliases[j]) === norm) {
+                        return keys[i];
+                    }
+                }
+            }
+            return null;
+        }
+
+        // ==================== Excel Import ====================
+        function parseExcel(file) {
+            return new Promise(function(resolve, reject) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        var data = new Uint8Array(e.target.result);
+                        var workbook = XLSX.read(data, { type: 'array' });
+                        var firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        var json = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+                        if (json.length === 0) {
+                            reject(new Error('Excel文件为空'));
+                            return;
+                        }
+
+                        var headers = json[0];
+                        var colMap = {};
+                        var hasData = false;
+
+                        for (var hi = 0; hi < headers.length; hi++) {
+                            var field = matchColumn(headers[hi]);
+                            if (field) {
+                                colMap[field] = hi;
+                                hasData = true;
+                            }
+                        }
+
+                        if (!hasData) {
+                            reject(new Error('未识别到有效的物料列，请确保Excel包含：物料编码、名称、规格、单位、库位、库存数量'));
+                            return;
+                        }
+
+                        var items = [];
+                        for (var ri = 1; ri < json.length; ri++) {
+                            var row = json[ri];
+                            if (!row || row.every(function(c) { return !c; })) continue;
+
+                            var item = {
+                                id: Date.now() + '_' + ri,
+                                code: colMap['物料编码'] !== undefined ? String(row[colMap['物料编码']] || '').trim() : '',
+                                name: colMap['物料名称'] !== undefined ? String(row[colMap['物料名称']] || '').trim() : '',
+                                spec: colMap['规格型号'] !== undefined ? String(row[colMap['规格型号']] || '').trim() : '',
+                                unit: colMap['单位'] !== undefined ? String(row[colMap['单位']] || '').trim() : '',
+                                location: colMap['库位'] !== undefined ? String(row[colMap['库位']] || '').trim() : '',
+                                stock: colMap['库存数量'] !== undefined ? parseFloat(row[colMap['库存数量']]) || 0 : 0,
+                                remark: colMap['备注'] !== undefined ? String(row[colMap['备注']] || '').trim() : '',
+                                count: null,
+                                status: 'pending'
+                            };
+
+                            if (item.code || item.name) {
+                                items.push(item);
+                            }
+                        }
+
+                        resolve(items);
+                    } catch (err) {
+                        reject(err);
+                    }
+                };
+                reader.onerror = function() { reject(new Error('文件读取失败')); };
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // ==================== Excel Export ====================
+        async function exportToExcel(taskId, taskName) {
+            var inventory = await getTaskInventory(taskId);
+            if (inventory.length === 0) {
+                showToast('没有可导出的数据', 'error');
+                return;
+            }
+
+            var data = inventory.map(function(item, idx) {
+                var diff = item.count !== null ? item.count - item.stock : '';
+                var status = '未录入';
+
+                if (item.count !== null) {
+                    if (item.count > item.stock) status = '盘盈';
+                    else if (item.count < item.stock) status = '盘亏';
+                    else status = '相符';
+                }
+
+                return {
+                    '序号': idx + 1,
+                    '物料编码': item.code,
+                    '物料名称': item.name,
+                    '规格型号': item.spec,
+                    '单位': item.unit,
+                    '库位': item.location,
+                    '账面数量': item.stock,
+                    '盘点数量': item.count !== null ? item.count : '',
+                    '差异': item.count !== null ? diff : '',
+                    '状态': status,
+                    '备注': item.remark
+                };
+            });
+
+            var ws = XLSX.utils.json_to_sheet(data);
+            var wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '差异报告');
+
+            ws['!cols'] = [
+                { wch: 6 }, { wch: 15 }, { wch: 25 }, { wch: 20 },
+                { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 10 },
+                { wch: 10 }, { wch: 8 }, { wch: 20 }
+            ];
+
+            XLSX.writeFile(wb, taskName + '_差异报告_' + formatDate(new Date()) + '.xlsx');
+            showToast('Excel报告已导出', 'success');
+        }
+
+        // ==================== App State ====================
+        var currentUser = null;
+        var currentTaskId = null;
+        var currentFilter = 'all';
+        var searchQuery = '';
+
+        // ==================== UI Helpers ====================
+        function showToast(message, type) {
+            type = type || 'info';
+            var toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show ' + type;
+            setTimeout(function() { toast.classList.remove('show'); }, 3000);
+        }
+
+        function formatDate(d) {
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        }
+
+        function formatDateTime(d) {
+            return formatDate(d) + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+        }
+
+        function openModal(id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.classList.add('active');
+                if (el.style.display === 'none' || getComputedStyle(el).display === 'none') {
+                    el.style.display = 'flex';
+                }
+            }
+        }
+
+        function closeModal(id) {
+            var el = document.getElementById(id);
+            if (el) el.classList.remove('active');
+        }
+
+        function closeAllModals() {
+            var modals = document.querySelectorAll('.modal-overlay');
+            for (var i = 0; i < modals.length; i++) modals[i].classList.remove('active');
+        }
+
+        function updateRoleUI() {
+            var isAdmin = currentUser && currentUser.role === 'admin';
+            var adminOnlyEls = document.querySelectorAll('.admin-only');
+            for (var i = 0; i < adminOnlyEls.length; i++) {
+                adminOnlyEls[i].style.display = isAdmin ? '' : 'none';
+            }
+        }
+
+        // ==================== Auth ====================
+        async function login(username, password) {
+            var user = await findUser(username);
+            if (user && user.password === hash(password)) {
+                currentUser = user;
+                setDataLocal(STORAGE.CURRENT_USER, user);
+                return true;
+            }
+            return false;
+        }
+
+        function logout() {
+            currentUser = null;
+            delDataLocal(STORAGE.CURRENT_USER);
+            document.getElementById('loginContainer').style.display = '';
+            document.getElementById('appContainer').classList.remove('active');
+        }
+
+        async function checkAuth() {
+            var saved = getDataLocal(STORAGE.CURRENT_USER);
+            if (saved) {
+                var user = await findUser(saved.username);
+                if (user && user.id === saved.id) {
+                    currentUser = user;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        async function showApp() {
+            document.getElementById('loginContainer').style.display = 'none';
+            document.getElementById('appContainer').classList.add('active');
+            document.getElementById('currentUserName').textContent = currentUser.username;
+            var roleEl = document.getElementById('currentUserRole');
+            roleEl.textContent = currentUser.role === 'admin' ? '管理员' : '盘点员';
+            roleEl.className = 'role-badge ' + currentUser.role;
+            updateRoleUI();
+            await renderTaskList();
+            showPage('tasks');
+            setupRealtime();
+        }
+
+        // ==================== Realtime Subscriptions ====================
+        function setupRealtime() {
+            if (!dbReady || !sb) return;
+
+            sb.channel('db-changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, async function() {
+                    if (window._selfWrite) return;
+                    await renderTaskList();
+                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items' }, async function() {
+                    if (window._selfWrite) return;
+                    if (currentTaskId) {
+                        await renderInventoryTable();
+                        await renderTaskList();
+                    }
+                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'signatures' }, async function() {
+                    if (window._selfWrite) return;
+                    if (currentTaskId && document.getElementById('signatureSection').innerHTML) {
+                        await renderSignatures();
+                    }
+                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, async function() {
+                    if (window._selfWrite) return;
+                    if (currentUser && currentUser.role === 'admin') {
+                        await renderUserList();
+                    }
+                })
+                .subscribe();
+        }
+
+        // ==================== Task List ====================
+        async function renderTaskList() {
+            var tasks = await getTasks();
+            var list = document.getElementById('taskList');
+
+            if (tasks.length === 0) {
+                list.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg><h3>暂无任务</h3><p>点击"新建任务"创建盘点任务</p></div>';
+                return;
+            }
+
+            var html = '';
+            for (var ti = 0; ti < tasks.length; ti++) {
+                var task = tasks[ti];
+                var inv = await getTaskInventory(task.id);
+                var done = 0;
+                for (var di = 0; di < inv.length; di++) {
+                    if (inv[di].count !== null) done++;
+                }
+                var isActive = task.id === currentTaskId;
+                html += '<div class="task-item ' + (isActive ? 'active' : '') + '" data-id="' + task.id + '">' +
+                    '<div><div class="task-name">' + task.name + '</div>' +
+                    '<div class="task-meta">盘点人: ' + task.checkerName + ' · ' + done + '/' + inv.length + ' 已盘点</div></div>' +
+                    '<div style="display:flex;align-items:center;gap:10px;">' +
+                    (currentUser.role === 'admin' ? '<span class="delete-task" data-id="' + task.id + '">&times;</span>' : '') +
+                    '</div></div>';
+            }
+            list.innerHTML = html;
+
+            var items = list.querySelectorAll('.task-item');
+            for (var ii = 0; ii < items.length; ii++) {
+                items[ii].addEventListener('click', async function(e) {
+                    if (e.target.classList.contains('delete-task')) {
+                        if (confirm('确定删除此任务？')) {
+                            await deleteTask(parseInt(e.target.dataset.id));
+                        }
+                        return;
+                    }
+                    await selectTask(parseInt(this.dataset.id));
+                });
+            }
+        }
+
+        async function selectTask(taskId) {
+            currentTaskId = taskId;
+            var tasks = await getTasks();
+            var task = null;
+            for (var ti = 0; ti < tasks.length; ti++) {
+                if (tasks[ti].id === taskId) { task = tasks[ti]; break; }
+            }
+            document.getElementById('currentTaskName').textContent = task ? task.name : '-';
+            await renderTaskList();
+            showPage('inventory');
+        }
+
+        async function deleteTask(taskId) {
+            var tasks = await getTasks();
+            var newTasks = [];
+            for (var ti = 0; ti < tasks.length; ti++) {
+                if (tasks[ti].id !== taskId) newTasks.push(tasks[ti]);
+            }
+            await saveTasks(newTasks);
+            await delData(STORAGE.INVENTORY + taskId);
+            await delData(STORAGE.SIGNATURES + taskId);
+            if (currentTaskId === taskId) currentTaskId = null;
+            await renderTaskList();
+            showToast('任务已删除', 'success');
+        }
+
+        // ==================== Inventory Page ====================
+        async function renderInventoryPage() {
+            if (!currentTaskId) {
+                document.getElementById('noTaskSelected').style.display = '';
+                document.getElementById('inventoryContent').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('noTaskSelected').style.display = 'none';
+            document.getElementById('inventoryContent').style.display = '';
+            await renderInventoryTable();
+        }
+
+        async function renderInventoryTable() {
+            var inventory = await getTaskInventory(currentTaskId);
+
+            var filtered = inventory;
+            if (searchQuery) {
+                var q = searchQuery.toLowerCase();
+                filtered = [];
+                for (var fi = 0; fi < inventory.length; fi++) {
+                    if (inventory[fi].code.toLowerCase().indexOf(q) !== -1 ||
+                        inventory[fi].name.toLowerCase().indexOf(q) !== -1) {
+                        filtered.push(inventory[fi]);
+                    }
+                }
+            }
+            if (currentFilter === 'pending') {
+                var pending = [];
+                for (var pi = 0; pi < filtered.length; pi++) {
+                    if (filtered[pi].count === null) pending.push(filtered[pi]);
+                }
+                filtered = pending;
+            } else if (currentFilter === 'done') {
+                var done = [];
+                for (var di = 0; di < filtered.length; di++) {
+                    if (filtered[di].count !== null) done.push(filtered[di]);
+                }
+                filtered = done;
+            }
+
+            var doneCount = 0;
+            for (var ci = 0; ci < inventory.length; ci++) {
+                if (inventory[ci].count !== null) doneCount++;
+            }
+            var total = inventory.length;
+            var pct = total ? Math.round(doneCount / total * 100) : 0;
+            document.getElementById('progressText').textContent = doneCount + ' / ' + total;
+            document.getElementById('progressFill').style.width = pct + '%';
+
+            var tbody = document.getElementById('inventoryBody');
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#999;">暂无数据或无匹配结果</td></tr>';
+                return;
+            }
+
+            var isAdmin = currentUser && currentUser.role === 'admin';
+            var rows = '';
+            for (var ri = 0; ri < filtered.length; ri++) {
+                var item = filtered[ri];
+                var statusClass = item.count !== null ? 'status-done' : 'status-pending';
+                var statusText = item.count !== null ? '已盘点' : '待盘点';
+                var countClass = item.count !== null ? 'entered' : '';
+                var adminCol = isAdmin ? '<td>' + item.stock + '</td>' : '';
+                rows += '<tr data-id="' + item.id + '">' +
+                    '<td>' + (ri + 1) + '</td>' +
+                    '<td>' + item.code + '</td>' +
+                    '<td>' + item.name + '</td>' +
+                    '<td>' + item.spec + '</td>' +
+                    '<td>' + item.unit + '</td>' +
+                    '<td>' + item.location + '</td>' +
+                    adminCol +
+                    '<td><input type="number" class="count-input ' + countClass + '" value="' + (item.count !== null ? item.count : '') + '" placeholder="输入数量" data-id="' + item.id + '"></td>' +
+                    '<td><span class="' + statusClass + '">' + statusText + '</span></td>' +
+                    '</tr>';
+            }
+            tbody.innerHTML = rows;
+
+            var inputs = tbody.querySelectorAll('.count-input');
+            for (var ni = 0; ni < inputs.length; ni++) {
+                inputs[ni].addEventListener('change', handleCountChange);
+                inputs[ni].addEventListener('keydown', handleCountKeydown);
+            }
+        }
+
+        async function handleCountChange(e) {
+            var id = e.target.dataset.id;
+            var val = e.target.value;
+            var count = val === '' ? null : parseFloat(val);
+
+            var inventory = await getTaskInventory(currentTaskId);
+            for (var i = 0; i < inventory.length; i++) {
+                if (inventory[i].id === id) {
+                    inventory[i].count = count;
+                    inventory[i].status = count !== null ? 'done' : 'pending';
+                    break;
+                }
+            }
+            await saveTaskInventory(currentTaskId, inventory);
+            await renderInventoryTable();
+        }
+
+        function handleCountKeydown(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                var inputs = document.querySelectorAll('.count-input');
+                var idx = Array.prototype.slice.call(inputs).indexOf(e.target);
+                if (idx < inputs.length - 1) {
+                    inputs[idx + 1].focus();
+                }
+            }
+        }
+
+        // ==================== Report Page ====================
+        async function renderReportPage() {
+            if (!currentTaskId) {
+                document.getElementById('reportNoTask').style.display = '';
+                document.getElementById('reportContent').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('reportNoTask').style.display = 'none';
+            document.getElementById('reportContent').style.display = '';
+
+            var inventory = await getTaskInventory(currentTaskId);
+
+            var profit = 0, loss = 0, match = 0, empty = 0;
+            for (var i = 0; i < inventory.length; i++) {
+                if (inventory[i].count === null) empty++;
+                else if (inventory[i].count > inventory[i].stock) profit++;
+                else if (inventory[i].count < inventory[i].stock) loss++;
+                else match++;
+            }
+
+            document.getElementById('reportSummary').innerHTML =
+                '<div style="flex:1;min-width:120px;padding:15px;background:#ffebee;border-radius:8px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#c62828;">' + profit + '</div><div style="font-size:13px;color:#c62828;">盘盈</div></div>' +
+                '<div style="flex:1;min-width:120px;padding:15px;background:#e8f5e9;border-radius:8px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#2e7d32;">' + loss + '</div><div style="font-size:13px;color:#2e7d32;">盘亏</div></div>' +
+                '<div style="flex:1;min-width:120px;padding:15px;background:#fff8e1;border-radius:8px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#f9a825;">' + empty + '</div><div style="font-size:13px;color:#f9a825;">未录入</div></div>' +
+                '<div style="flex:1;min-width:120px;padding:15px;background:#e3f2fd;border-radius:8px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#1565c0;">' + match + '</div><div style="font-size:13px;color:#1565c0;">相符</div></div>';
+
+            var tbody = document.getElementById('reportBody');
+            var reportRows = '';
+            for (var ri = 0; ri < inventory.length; ri++) {
+                var item = inventory[ri];
+                var diff = item.count !== null ? item.count - item.stock : '';
+                var diffClass = 'diff-empty';
+                var statusText = '未录入';
+
+                if (item.count !== null) {
+                    if (item.count > item.stock) {
+                        diffClass = 'diff-profit';
+                        statusText = '盘盈 +' + diff;
+                    } else if (item.count < item.stock) {
+                        diffClass = 'diff-loss';
+                        statusText = '盘亏 ' + diff;
+                    } else {
+                        diffClass = 'diff-match';
+                        statusText = '相符';
+                    }
+                }
+
+                reportRows += '<tr class="' + diffClass + '">' +
+                    '<td>' + (ri + 1) + '</td>' +
+                    '<td>' + item.code + '</td>' +
+                    '<td>' + item.name + '</td>' +
+                    '<td>' + item.spec + '</td>' +
+                    '<td>' + item.stock + '</td>' +
+                    '<td>' + (item.count !== null ? item.count : '-') + '</td>' +
+                    '<td>' + (diff !== '' ? (diff > 0 ? '+' + diff : diff) : '-') + '</td>' +
+                    '<td>' + statusText + '</td>' +
+                    '<td>' + item.remark + '</td>' +
+                    '</tr>';
+            }
+            tbody.innerHTML = reportRows;
+
+            await renderSignatures();
+        }
+
+        async function renderSignatures() {
+            var sigs = await getSignatures(currentTaskId);
+            var roles = [
+                { key: 'checker', label: '盘点人' },
+                { key: 'supervisor', label: '监盘人' },
+                { key: 'manager', label: '负责人' }
+            ];
+
+            var section = document.getElementById('signatureSection');
+            var html = '';
+            for (var ri = 0; ri < roles.length; ri++) {
+                var r = roles[ri];
+                var hasSig = sigs[r.key] ? true : false;
+                html += '<div class="signature-box">' +
+                    '<h4>' + r.label + '</h4>' +
+                    (hasSig ? '' : '<canvas class="signature-canvas" data-role="' + r.key + '" width="300" height="150"></canvas>') +
+                    (hasSig ? '<img src="' + sigs[r.key] + '" style="max-width:100%;border:1px solid #ddd;border-radius:8px;">' : '') +
+                    '<div class="signature-actions">' +
+                    '<button class="btn btn-sm ' + (hasSig ? 'btn-secondary' : 'btn-primary') + '" data-role="' + r.key + '">' + (hasSig ? '重新签名' : '签名') + '</button>' +
+                    (hasSig ? '<button class="btn btn-sm btn-danger" data-clear="' + r.key + '">清除</button>' : '') +
+                    '</div></div>';
+            }
+            section.innerHTML = html;
+
+            var btns = section.querySelectorAll('[data-role]');
+            for (var bi = 0; bi < btns.length; bi++) {
+                if (btns[bi].tagName === 'BUTTON') {
+                    btns[bi].addEventListener('click', function() {
+                        openSignatureModal(this.dataset.role);
+                    });
+                }
+            }
+
+            var clearBtns = section.querySelectorAll('[data-clear]');
+            for (var ci = 0; ci < clearBtns.length; ci++) {
+                clearBtns[ci].addEventListener('click', async function() {
+                    await clearSignature(this.dataset.clear);
+                });
+            }
+        }
+
+        // ==================== Signature Canvas ====================
+        var signatureCtx = null;
+        var signatureRole = null;
+        var isDrawing = false;
+
+        function openSignatureModal(role) {
+            signatureRole = role;
+            var canvas = document.getElementById('signatureCanvas');
+            var title = document.getElementById('signatureModalTitle');
+            var roles = { checker: '盘点人', supervisor: '监盘人', manager: '负责人' };
+            title.textContent = roles[role] + '签名';
+
+            canvas.width = canvas.offsetWidth;
+            signatureCtx = canvas.getContext('2d');
+            signatureCtx.fillStyle = '#f8f9fa';
+            signatureCtx.fillRect(0, 0, canvas.width, canvas.height);
+            signatureCtx.strokeStyle = '#333';
+            signatureCtx.lineWidth = 2;
+            signatureCtx.lineCap = 'round';
+
+            openModal('signatureModal');
+        }
+
+        async function clearSignature(role) {
+            var sigs = await getSignatures(currentTaskId);
+            delete sigs[role];
+            await saveSignatures(currentTaskId, sigs);
+            await renderSignatures();
+            showToast('签名已清除', 'success');
+        }
+
+        function initSignatureCanvas() {
+            var canvas = document.getElementById('signatureCanvas');
+
+            function getPos(e) {
+                var rect = canvas.getBoundingClientRect();
+                var scaleX = canvas.width / rect.width;
+                var scaleY = canvas.height / rect.height;
+                var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                var clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * scaleX,
+                    y: (clientY - rect.top) * scaleY
+                };
+            }
+
+            canvas.addEventListener('mousedown', function(e) {
+                isDrawing = true;
+                var pos = getPos(e);
+                signatureCtx.beginPath();
+                signatureCtx.moveTo(pos.x, pos.y);
+            });
+
+            canvas.addEventListener('mousemove', function(e) {
+                if (!isDrawing) return;
+                var pos = getPos(e);
+                signatureCtx.lineTo(pos.x, pos.y);
+                signatureCtx.stroke();
+            });
+
+            canvas.addEventListener('mouseup', function() { isDrawing = false; });
+            canvas.addEventListener('mouseleave', function() { isDrawing = false; });
+
+            canvas.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                isDrawing = true;
+                var pos = getPos(e);
+                signatureCtx.beginPath();
+                signatureCtx.moveTo(pos.x, pos.y);
+            });
+
+            canvas.addEventListener('touchmove', function(e) {
+                e.preventDefault();
+                if (!isDrawing) return;
+                var pos = getPos(e);
+                signatureCtx.lineTo(pos.x, pos.y);
+                signatureCtx.stroke();
+            });
+
+            canvas.addEventListener('touchend', function() { isDrawing = false; });
+        }
+
+        // ==================== User Management ====================
+        async function renderUserList() {
+            var users = await getUsers();
+            var tbody = document.getElementById('userList');
+            var html = '';
+            for (var i = 0; i < users.length; i++) {
+                var u = users[i];
+                var roleLabel = u.role === 'admin' ? '管理员' : '盘点员';
+                html += '<tr>' +
+                    '<td>' + u.username + '</td>' +
+                    '<td><span class="role-badge ' + u.role + '">' + roleLabel + '</span></td>' +
+                    '<td>' + formatDateTime(new Date(u.createdAt)) + '</td>' +
+                    '<td><button class="btn btn-sm btn-secondary edit-user-btn" data-id="' + u.id + '">编辑</button>' +
+                    (u.id !== currentUser.id ? '<button class="btn btn-sm btn-danger delete-user-btn" data-id="' + u.id + '">删除</button>' : '') +
+                    '</td></tr>';
+            }
+            tbody.innerHTML = html;
+
+            var editBtns = tbody.querySelectorAll('.edit-user-btn');
+            for (var ei = 0; ei < editBtns.length; ei++) {
+                editBtns[ei].addEventListener('click', function() {
+                    openEditUserModal(parseInt(this.dataset.id));
+                });
+            }
+
+            var delBtns = tbody.querySelectorAll('.delete-user-btn');
+            for (var di = 0; di < delBtns.length; di++) {
+                delBtns[di].addEventListener('click', async function() {
+                    if (confirm('确定删除此用户？')) {
+                        await deleteUser(parseInt(this.dataset.id));
+                        await renderUserList();
+                        showToast('用户已删除', 'success');
+                    }
+                });
+            }
+        }
+
+        async function openEditUserModal(userId) {
+            var users = await getUsers();
+            var user = null;
+            for (var i = 0; i < users.length; i++) {
+                if (users[i].id === userId) { user = users[i]; break; }
+            }
+            if (!user) return;
+
+            document.getElementById('editUserId').value = user.id;
+            document.getElementById('editUserName').value = user.username;
+            document.getElementById('editUserRole').value = user.role;
+            document.getElementById('editUserPass').value = '';
+
+            openModal('editUserModal');
+        }
+
+        // ==================== Export/Import All Data ====================
+        async function exportAllData() {
+            var data = {
+                users: await getUsers(),
+                tasks: await getTasks(),
+                inventory: {},
+                signatures: {},
+                exportTime: Date.now()
+            };
+
+            var tasks = await getTasks();
+            for (var ti = 0; ti < tasks.length; ti++) {
+                var t = tasks[ti];
+                data.inventory[t.id] = await getTaskInventory(t.id);
+                data.signatures[t.id] = await getSignatures(t.id);
+            }
+
+            var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'inventory_backup_' + formatDate(new Date()) + '.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('数据已导出', 'success');
+        }
+
+        async function importAllData(file) {
+            var reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    var data = JSON.parse(e.target.result);
+                    if (data.users) await setData(STORAGE.USERS, data.users);
+                    if (data.tasks) await setData(STORAGE.TASKS, data.tasks);
+                    if (data.inventory) {
+                        var invKeys = Object.keys(data.inventory);
+                        for (var ki = 0; ki < invKeys.length; ki++) {
+                            await setData(STORAGE.INVENTORY + invKeys[ki], data.inventory[invKeys[ki]]);
+                        }
+                    }
+                    if (data.signatures) {
+                        var sigKeys = Object.keys(data.signatures);
+                        for (var si = 0; si < sigKeys.length; si++) {
+                            await setData(STORAGE.SIGNATURES + sigKeys[si], data.signatures[sigKeys[si]]);
+                        }
+                    }
+                    showToast('数据已导入', 'success');
+                    await renderTaskList();
+                    if (currentUser.role === 'admin') await renderUserList();
+                } catch (err) {
+                    showToast('导入失败: ' + err.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // ==================== Event Bindings ====================
+        function bindEvents() {
+            document.querySelectorAll('.login-tab').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    document.querySelectorAll('.login-tab').forEach(function(t) { t.classList.remove('active'); });
+                    tab.classList.add('active');
+                    var isLogin = tab.dataset.tab === 'login';
+                    document.getElementById('loginForm').style.display = isLogin ? '' : 'none';
+                    document.getElementById('registerForm').style.display = isLogin ? 'none' : '';
+                });
+            });
+
+            document.getElementById('loginForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                var username = document.getElementById('loginUsername').value;
+                var password = document.getElementById('loginPassword').value;
+                if (await login(username, password)) {
+                    await showApp();
+                } else {
+                    document.getElementById('loginError').style.display = '';
+                }
+            });
+
+            document.getElementById('registerForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                var username = document.getElementById('regUsername').value;
+                var password = document.getElementById('regPassword').value;
+                var password2 = document.getElementById('regPassword2').value;
+                var role = document.getElementById('regRole').value;
+                var errEl = document.getElementById('regError');
+
+                if (password !== password2) {
+                    errEl.textContent = '两次密码不一致';
+                    errEl.style.display = '';
+                    return;
+                }
+
+                var result = await addUser(username, password, role);
+                if (result.success) {
+                    showToast('注册成功，请登录', 'success');
+                    document.querySelector('.login-tab[data-tab="login"]').click();
+                    document.getElementById('loginUsername').value = username;
+                } else {
+                    errEl.textContent = result.message;
+                    errEl.style.display = '';
+                }
+            });
+
+            document.getElementById('logoutBtn').addEventListener('click', logout);
+
+            document.querySelectorAll('.nav-item').forEach(function(item) {
+                item.addEventListener('click', async function() {
+                    await showPage(this.dataset.page);
+                });
+            });
+
+            document.getElementById('mobileMenuBtn').addEventListener('click', function() {
+                document.getElementById('sidebar').classList.toggle('open');
+            });
+
+            document.addEventListener('click', function(e) {
+                var sidebar = document.getElementById('sidebar');
+                var menuBtn = document.getElementById('mobileMenuBtn');
+                if (window.innerWidth <= 768 && !sidebar.contains(e.target) && !menuBtn.contains(e.target)) {
+                    sidebar.classList.remove('open');
+                }
+            });
+
+            document.querySelectorAll('[data-close]').forEach(function(btn) {
+                btn.addEventListener('click', closeAllModals);
+            });
+
+            document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) closeAllModals();
+                });
+            });
+
+            document.getElementById('newTaskBtn').addEventListener('click', async function() {
+                var users = await getUsers();
+                var select = document.getElementById('taskChecker');
+                if (!users || users.length === 0) {
+                    showToast('没有可用用户，请先创建用户', 'error');
+                    return;
+                }
+                var options = '';
+                for (var i = 0; i < users.length; i++) {
+                    var u = users[i];
+                    var sel = String(u.id) === String(currentUser.id) ? 'selected' : '';
+                    options += '<option value="' + u.id + '" ' + sel + '>' + u.username + ' (' + (u.role === 'admin' ? '管理员' : '盘点员') + ')</option>';
+                }
+                select.innerHTML = options;
+                openModal('newTaskModal');
+                setTimeout(function() { document.getElementById('taskName').focus(); }, 100);
+            });
+
+            document.getElementById('saveTaskBtn').addEventListener('click', async function() {
+                var name = document.getElementById('taskName').value.trim();
+                if (!name) {
+                    showToast('请输入任务名称', 'error');
+                    document.getElementById('taskName').focus();
+                    return;
+                }
+                try {
+                    var checkerId = parseInt(document.getElementById('taskChecker').value);
+                    var users = await getUsers();
+                    var checker = null;
+                    for (var ci = 0; ci < users.length; ci++) {
+                        if (users[ci].id === checkerId) { checker = users[ci]; break; }
+                    }
+                    var tasks = await getTasks();
+                    var newTask = {
+                        id: Date.now(),
+                        name: name,
+                        checkerId: checkerId,
+                        checkerName: checker ? checker.username : (currentUser ? currentUser.username : ''),
+                        createdAt: Date.now()
+                    };
+                    tasks.push(newTask);
+                    await saveTasks(tasks);
+
+                    closeAllModals();
+                    document.getElementById('newTaskForm').reset();
+                    await renderTaskList();
+                    showToast('任务"' + name + '"已创建', 'success');
+                } catch(err) {
+                    showToast('创建任务失败: ' + err.message, 'error');
+                    console.error('Create task error:', err);
+                }
+            });
+
+            document.getElementById('newTaskForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                document.getElementById('saveTaskBtn').click();
+            });
+
+            document.getElementById('importBtn').addEventListener('click', function() {
+                if (!currentTaskId) {
+                    showToast('请先选择任务', 'error');
+                    return;
+                }
+                document.getElementById('excelFileInput').click();
+            });
+
+            document.getElementById('excelFileInput').addEventListener('change', async function(e) {
+                var file = e.target.files[0];
+                if (!file) return;
+
+                try {
+                    var items = await parseExcel(file);
+                    await saveTaskInventory(currentTaskId, items);
+                    await renderInventoryPage();
+                    await renderTaskList();
+                    showToast('成功导入 ' + items.length + ' 条物料', 'success');
+                } catch (err) {
+                    showToast(err.message, 'error');
+                }
+
+                e.target.value = '';
+            });
+
+            document.getElementById('exportInventoryBtn').addEventListener('click', async function() {
+                if (!currentTaskId) {
+                    showToast('请先选择任务', 'error');
+                    return;
+                }
+                var tasks = await getTasks();
+                var task = null;
+                for (var ti = 0; ti < tasks.length; ti++) {
+                    if (tasks[ti].id === currentTaskId) { task = tasks[ti]; break; }
+                }
+                await exportToExcel(currentTaskId, task ? task.name : 'inventory');
+            });
+
+            document.getElementById('searchInput').addEventListener('input', async function(e) {
+                searchQuery = e.target.value;
+                await renderInventoryTable();
+            });
+
+            document.querySelectorAll('.filter-tab').forEach(function(tab) {
+                tab.addEventListener('click', async function() {
+                    document.querySelectorAll('.filter-tab').forEach(function(t) { t.classList.remove('active'); });
+                    tab.classList.add('active');
+                    currentFilter = tab.dataset.filter;
+                    await renderInventoryTable();
+                });
+            });
+
+            document.getElementById('exportReportBtn').addEventListener('click', async function() {
+                if (!currentTaskId) {
+                    showToast('请先选择任务', 'error');
+                    return;
+                }
+                var tasks = await getTasks();
+                var task = null;
+                for (var ti = 0; ti < tasks.length; ti++) {
+                    if (tasks[ti].id === currentTaskId) { task = tasks[ti]; break; }
+                }
+                await exportToExcel(currentTaskId, task ? task.name : 'report');
+            });
+
+            document.getElementById('newUserBtn').addEventListener('click', function() {
+                openModal('newUserModal');
+            });
+
+            document.getElementById('saveUserBtn').addEventListener('click', async function() {
+                var username = document.getElementById('newUserName').value.trim();
+                var password = document.getElementById('newUserPass').value;
+                var role = document.getElementById('newUserRole').value;
+
+                if (!username || !password) {
+                    showToast('请填写完整信息', 'error');
+                    return;
+                }
+
+                var result = await addUser(username, password, role);
+                if (result.success) {
+                    closeAllModals();
+                    document.getElementById('newUserForm').reset();
+                    await renderUserList();
+                    showToast('用户已创建', 'success');
+                } else {
+                    showToast(result.message, 'error');
+                }
+            });
+
+            document.getElementById('updateUserBtn').addEventListener('click', async function() {
+                var id = parseInt(document.getElementById('editUserId').value);
+                var role = document.getElementById('editUserRole').value;
+                var newPass = document.getElementById('editUserPass').value;
+
+                await updateUser(id, role, newPass);
+                closeAllModals();
+                await renderUserList();
+                showToast('用户已更新', 'success');
+            });
+
+            initSignatureCanvas();
+
+            document.getElementById('clearSignatureBtn').addEventListener('click', function() {
+                var canvas = document.getElementById('signatureCanvas');
+                signatureCtx.fillStyle = '#f8f9fa';
+                signatureCtx.fillRect(0, 0, canvas.width, canvas.height);
+            });
+
+            document.getElementById('saveSignatureBtn').addEventListener('click', async function() {
+                var canvas = document.getElementById('signatureCanvas');
+                var dataUrl = canvas.toDataURL('image/png');
+                var sigs = await getSignatures(currentTaskId);
+                sigs[signatureRole] = dataUrl;
+                await saveSignatures(currentTaskId, sigs);
+                closeAllModals();
+                await renderSignatures();
+                showToast('签名已保存', 'success');
+            });
+
+            document.getElementById('changePasswordForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                var oldPwd = document.getElementById('oldPassword').value;
+                var newPwd = document.getElementById('newPassword').value;
+                var newPwd2 = document.getElementById('newPassword2').value;
+                var errEl = document.getElementById('pwdError');
+
+                if (hash(oldPwd) !== currentUser.password) {
+                    errEl.textContent = '当前密码错误';
+                    errEl.style.display = '';
+                    return;
+                }
+
+                if (newPwd !== newPwd2) {
+                    errEl.textContent = '两次新密码不一致';
+                    errEl.style.display = '';
+                    return;
+                }
+
+                await updateUser(currentUser.id, currentUser.role, newPwd);
+                currentUser.password = hash(newPwd);
+                setDataLocal(STORAGE.CURRENT_USER, currentUser);
+                document.getElementById('changePasswordForm').reset();
+                errEl.style.display = 'none';
+                showToast('密码已修改', 'success');
+            });
+
+            document.getElementById('exportAllDataBtn').addEventListener('click', exportAllData);
+
+            document.getElementById('importDataBtn').addEventListener('click', function() {
+                document.getElementById('importDataFile').click();
+            });
+
+            document.getElementById('importDataFile').addEventListener('change', function(e) {
+                var file = e.target.files[0];
+                if (file) {
+                    if (confirm('导入将覆盖现有数据，确定继续？')) {
+                        importAllData(file);
+                    }
+                    e.target.value = '';
+                }
+            });
+
+            document.getElementById('clearDataBtn').addEventListener('click', async function() {
+                if (confirm('确定清空所有数据？此操作不可恢复！')) {
+                    if (confirm('再次确认：所有盘点任务和用户数据将被删除！')) {
+                        if (dbReady && sb) {
+                            try {
+                                await sb.from('inventory_items').delete().neq('id', 0);
+                                await sb.from('signatures').delete().neq('id', 0);
+                                await sb.from('tasks').delete().neq('id', 0);
+                                await sb.from('users').delete().neq('id', 0);
+                            } catch(err) { console.error('Clear DB error:', err); }
+                        }
+                        localStorage.clear();
+                        await initUsers();
+                        logout();
+                        showToast('所有数据已清空', 'success');
+                    }
+                }
+            });
+
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') closeAllModals();
+            });
+        }
+
+        async function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(function(p) { p.style.display = 'none'; });
+            document.getElementById('page-' + pageId).style.display = 'block';
+
+            document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+            var navItem = document.querySelector('.nav-item[data-page="' + pageId + '"]');
+            if (navItem) navItem.classList.add('active');
+
+            document.getElementById('sidebar').classList.remove('open');
+
+            if (pageId === 'inventory') {
+                await renderInventoryPage();
+            } else if (pageId === 'report') {
+                await renderReportPage();
+            }
+        }
+
+        // ==================== Initialize ====================
+        document.addEventListener('DOMContentLoaded', async function() {
+            initSupabase();
+            await initUsers();
+            bindEvents();
+            if (await checkAuth()) {
+                await showApp();
+            }
+        });
+
+    })();
+    </script>
+</body>
+</html>
